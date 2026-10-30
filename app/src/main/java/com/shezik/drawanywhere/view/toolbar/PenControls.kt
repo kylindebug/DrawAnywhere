@@ -1,6 +1,11 @@
 package com.shezik.drawanywhere.view.toolbar
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -42,6 +47,24 @@ fun PenControls(
             valueDisplay = { "${(it * 100).toInt()}%" },
             enabled = alphaEnabled,
         )
+        // Physical pixel width matches the native canvas at 100% zoom.
+        Canvas(Modifier.fillMaxWidth().height(64.dp).background(Color(0xFFE0E0E0))) {
+            val tile = 8.dp.toPx()
+            for (y in 0..(size.height / tile).toInt()) {
+                for (x in 0..(size.width / tile).toInt()) {
+                    if ((x + y) % 2 == 0) drawRect(Color.White,
+                        topLeft = Offset(x * tile, y * tile),
+                        size = androidx.compose.ui.geometry.Size(tile, tile))
+                }
+            }
+            drawLine(
+                color = penConfig.color.copy(alpha = if (alphaEnabled) penConfig.alpha else 1f),
+                start = Offset(32.dp.toPx(), size.height / 2),
+                end = Offset(size.width - 32.dp.toPx(), size.height / 2),
+                strokeWidth = penConfig.width,
+                cap = StrokeCap.Round,
+            )
+        }
     }
 }
 

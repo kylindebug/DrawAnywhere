@@ -25,6 +25,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.toArgb
 import com.shezik.drawanywhere.DrawController
 import com.shezik.drawanywhere.DrawViewModel
+import com.shezik.drawanywhere.drawing.InkRenderer
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancel
@@ -71,6 +72,8 @@ class NativeDrawCanvasView(
 
     override fun onTouchEvent(event: MotionEvent): Boolean =
         touchHandler.handleEvent(event)
+
+    fun cancelInput() = touchHandler.cancelInput()
 
     // ── Hover (stylus/mouse size preview) ──────────────────────
 
@@ -122,9 +125,7 @@ class NativeDrawCanvasView(
         canvas.translate(-vp.panX * vp.zoom, -vp.panY * vp.zoom)
         canvas.scale(vp.zoom, vp.zoom)
 
-        for (stroke in drawController.strokeList) {
-            stroke.render(canvas, pathPaint)
-        }
+        InkRenderer.render(canvas, drawController.strokeList, pathPaint)
         canvas.restore()
 
         // ── Hover size preview (screen space, constant border) ────

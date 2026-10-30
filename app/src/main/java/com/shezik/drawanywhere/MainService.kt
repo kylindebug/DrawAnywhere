@@ -22,8 +22,10 @@ import android.app.NotificationManager
 import android.app.Service
 import android.content.Intent
 import android.content.pm.ServiceInfo
+import android.content.res.Configuration
 import android.graphics.PixelFormat
 import android.graphics.Point
+import android.hardware.input.InputManager
 import android.os.Build
 import android.os.IBinder
 import android.view.Gravity
@@ -34,12 +36,18 @@ import android.view.WindowManager.LayoutParams
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.unit.round
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import com.shezik.drawanywhere.view.DismissTargetView
 import com.shezik.drawanywhere.view.ToolbarLifecycleOwner
 import com.shezik.drawanywhere.view.canvas.NativeDrawCanvasView
 import com.shezik.drawanywhere.view.toolbar.DrawToolbar
+import com.shezik.drawanywhere.view.toolbar.ToolbarPlacement
+import com.shezik.drawanywhere.view.toolbar.ToolbarOrientation
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -64,6 +72,11 @@ class MainService : Service() {
     private lateinit var preferencesManager: PreferencesManager
     private lateinit var viewModel: DrawViewModel
     private val serviceScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
+    private var previousInputState: Triple<Boolean, Boolean, Boolean>? = null
+    private var toolbarExpandsTowardStart by mutableStateOf(false)
+    private var eyeInWindow: Offset? = null
+    private var measuredToolbarSize = IntSize.Zero
+    private lateinit var toolbarParams: LayoutParams
 
     override fun onCreate() {
         super.onCreate()
@@ -98,6 +111,7 @@ class MainService : Service() {
             LayoutParams.MATCH_PARENT,
             LayoutParams.TYPE_APPLICATION_OVERLAY,
             LayoutParams.FLAG_NOT_FOCUSABLE or
+                    LayoutParams.FLAG_HARDWARE_ACCELERATED or
                     LayoutParams.FLAG_NOT_TOUCH_MODAL or
                     LayoutParams.FLAG_LAYOUT_IN_SCREEN,
             PixelFormat.TRANSLUCENT
@@ -106,12 +120,22 @@ class MainService : Service() {
 
         // -------- Setup toolbar (Compose) --------
         toolbarLifecycleOwner.start()
+        chooseToolbarExpansion()
         toolbarView = ComposeView(this).apply {
-            setContent { DrawToolbar(viewModel = viewModel) }
+            setContent { DrawToolbar(
+                viewModel = viewModel,
+                expandTowardStart = toolbarExpandsTowardStart,
+                onBeforeExpand = ::chooseToolbarExpansion,
+                onGeometryMeasured = ::onToolbarMeasured,
+                onDragPosition = { local ->
+                    viewModel.onDismissDragMove(local + toolbarWindowOrigin() -
+                        viewModel.serviceState.value.toolbarPosition)
+                }
+            ) }
         }
         toolbarLifecycleOwner.attachTo(toolbarView)
 
-        val toolbarParams = LayoutParams(
+        toolbarParams = LayoutParams(
             LayoutParams.WRAP_CONTENT,
             LayoutParams.WRAP_CONTENT,
             LayoutParams.TYPE_APPLICATION_OVERLAY,
@@ -119,7 +143,13 @@ class MainService : Service() {
                     LayoutParams.FLAG_NOT_TOUCH_MODAL or
                     LayoutParams.FLAG_LAYOUT_IN_SCREEN,
             PixelFormat.TRANSLUCENT
-        ).apply { gravity = Gravity.TOP or Gravity.START }
+        ).apply {
+            gravity = Gravity.TOP or Gravity.LEFT
+            windowAnimations = 0
+            // Position animations are separate from enter/exit animations.
+            // Resizing an end-anchored window also moves its top-left corner.
+            if (Build.VERSION.SDK_INT >= 34) setCanPlayMoveAnimation(false)
+        }
 
         applyToolbarPosition(toolbarParams, initialServiceState)
         // ---------------------------------------
@@ -154,6 +184,11 @@ class MainService : Service() {
         // Observe UI state changes
         serviceScope.launch {
             viewModel.uiState.collect { state ->
+                val inputState = Triple(state.canvasVisible, state.canvasPassthrough, state.fingerDrawingEnabled)
+                if (previousInputState != inputState) {
+                    canvasView.cancelInput()
+                    previousInputState = inputState
+                }
                 applyCanvasPassthrough(canvasParams, state.canvasPassthrough)
                 windowManager.updateViewLayout(canvasView, canvasParams)
                 canvasView.visibility = if (state.canvasVisible) View.VISIBLE else View.GONE
@@ -195,16 +230,82 @@ class MainService : Service() {
             params.flags or LayoutParams.FLAG_NOT_TOUCHABLE
         else
             params.flags and LayoutParams.FLAG_NOT_TOUCHABLE.inv()
+        // Android 12+ blocks touches through opaque application overlays. Respect
+        // the system limit so the real finger stream reaches the underlying app.
+        params.alpha = if (passthrough && Build.VERSION.SDK_INT >= 31)
+            getSystemService(InputManager::class.java).maximumObscuringOpacityForTouch
+        else 1f
     }
 
     private fun applyToolbarPosition(params: LayoutParams, state: ServiceState) {
-        val rounded = state.toolbarPosition.round()
         val (screenWidth, screenHeight) = getUsableScreenSize(windowManager)
-        params.x = rounded.x.coerceIn(0, screenWidth - toolbarView.width)
-        params.y = rounded.y.coerceIn(0, screenHeight - toolbarView.height)
-        viewModel.setToolbarPosition(
-            Offset(params.x.toFloat(), params.y.toFloat())
+        // Persist the compact eye's origin, never the expanded window's origin.
+        // Layout callbacks must not write the measured window position back into
+        // that anchor: doing so makes expansion drift and can oscillate forever.
+        val radius = 36f * resources.displayMetrics.density
+        val origin = Offset(
+            state.toolbarPosition.x.coerceIn(0f, (screenWidth - 2 * radius).coerceAtLeast(0f)),
+            state.toolbarPosition.y.coerceIn(0f, (screenHeight - 2 * radius).coerceAtLeast(0f)))
+        val eye = eyeInWindow ?: Offset(radius, radius)
+        val position = ToolbarPlacement.position(origin + Offset(radius, radius), eye,
+            measuredToolbarSize, IntSize(screenWidth, screenHeight)).round()
+        val reverseHorizontal = toolbarExpandsTowardStart &&
+            viewModel.uiState.value.toolbarOrientation == ToolbarOrientation.HORIZONTAL
+        val reverseVertical = toolbarExpandsTowardStart &&
+            viewModel.uiState.value.toolbarOrientation == ToolbarOrientation.VERTICAL
+        // Keep the eye-side window edge fixed. Repositioning a TOP/LEFT window
+        // for every size change can trigger a system move animation, displaying
+        // the expanded surface beyond the screen before sliding it back.
+        params.gravity = (if (reverseHorizontal) Gravity.RIGHT else Gravity.LEFT) or
+            (if (reverseVertical) Gravity.BOTTOM else Gravity.TOP)
+        params.x = if (reverseHorizontal) screenWidth - position.x - measuredToolbarSize.width else position.x
+        params.y = if (reverseVertical) screenHeight - position.y - measuredToolbarSize.height else position.y
+        if (origin != state.toolbarPosition) viewModel.setToolbarPosition(origin)
+    }
+
+    private fun chooseToolbarExpansion() {
+        settleToolbarAnchor()
+        val (width, height) = getUsableScreenSize(windowManager)
+        val radius = 36f * resources.displayMetrics.density
+        toolbarExpandsTowardStart = ToolbarPlacement.towardStart(
+            viewModel.serviceState.value.toolbarPosition + Offset(radius, radius),
+            IntSize(width, height), viewModel.uiState.value.toolbarOrientation
         )
+    }
+
+    private fun settleToolbarAnchor() {
+        val eye = eyeInWindow ?: return
+        if (!::toolbarParams.isInitialized) return
+        val radius = 36f * resources.displayMetrics.density
+        viewModel.setToolbarPosition(toolbarWindowOrigin() + eye - Offset(radius, radius))
+    }
+
+    private fun toolbarWindowOrigin(): Offset {
+        if (::toolbarView.isInitialized && toolbarView.isAttachedToWindow) {
+            val location = IntArray(2)
+            toolbarView.getLocationOnScreen(location)
+            return Offset(location[0].toFloat(), location[1].toFloat())
+        }
+        return Offset(toolbarParams.x.toFloat(), toolbarParams.y.toFloat())
+    }
+
+    private fun onToolbarMeasured(localEye: Offset, size: IntSize) {
+        if (eyeInWindow == localEye && measuredToolbarSize == size) return
+        eyeInWindow = localEye
+        measuredToolbarSize = size
+        if (toolbarView.isAttachedToWindow) {
+            applyToolbarPosition(toolbarParams, viewModel.serviceState.value)
+            windowManager.updateViewLayout(toolbarView, toolbarParams)
+        }
+    }
+
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        if (::toolbarView.isInitialized && toolbarView.isAttachedToWindow) {
+            applyToolbarPosition(toolbarParams, viewModel.serviceState.value)
+            windowManager.updateViewLayout(toolbarView, toolbarParams)
+            chooseToolbarExpansion()
+        }
     }
 
     @Suppress("DEPRECATION")
@@ -223,6 +324,7 @@ class MainService : Service() {
     override fun onDestroy() {
         super.onDestroy()
         isRunning = false
+        if (::canvasView.isInitialized) canvasView.cancelInput()
         serviceScope.cancel()
         if (::toolbarView.isInitialized && toolbarView.isAttachedToWindow)
             windowManager.removeView(toolbarView)

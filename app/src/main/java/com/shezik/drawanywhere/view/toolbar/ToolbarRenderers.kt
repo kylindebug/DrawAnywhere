@@ -4,6 +4,8 @@ import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
@@ -17,7 +19,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
@@ -38,14 +41,16 @@ internal fun ToolbarExpandButton(
     modifier: Modifier,
     isExpanded: Boolean,
     onClick: () -> Unit,
-    orientation: ToolbarOrientation
+    orientation: ToolbarOrientation,
+    expandTowardStart: Boolean = false
 ) {
     val targetAngles = when (orientation) {
         ToolbarOrientation.HORIZONTAL -> 180f to 0f
         ToolbarOrientation.VERTICAL -> 270f to 90f
     }
     val rotationAngle by animateFloatAsState(
-        targetValue = if (isExpanded) targetAngles.first else targetAngles.second,
+        targetValue = (if (isExpanded) targetAngles.first else targetAngles.second) +
+            (if (expandTowardStart) 180f else 0f),
         animationSpec = tween(300, easing = FastOutSlowInEasing),
         label = "toggle_rotation"
     )
@@ -121,27 +126,27 @@ internal fun PopupToolbarButton(
         }
         if (isPopupOpen && button.popupPages.isNotEmpty()) {
             val pagerState = rememberPagerState(initialPage = 0) { button.popupPages.size }
+            val gap = with(LocalDensity.current) { 8.dp.roundToPx() }
             Popup(
-                alignment = popupAlignment,
-                offset = when (popupAlignment) {
-                    Alignment.TopCenter -> IntOffset(0, -60)
-                    Alignment.CenterEnd -> IntOffset(60, 0)
-                    else -> IntOffset(0, 0)
+                popupPositionProvider = remember(popupAlignment, gap) {
+                    ToolbarPopupPositionProvider(popupAlignment == Alignment.TopCenter, gap)
                 },
                 onDismissRequest = { isPopupOpen = false },
                 properties = PopupProperties(focusable = true)
             ) {
                 Card(
-                    modifier = Modifier.wrapContentSize().width(200.dp),
+                    modifier = Modifier.width(280.dp)
+                        .heightIn(max = (LocalConfiguration.current.screenHeightDp - 32).coerceAtLeast(120).dp),
                     elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
                     shape = RoundedCornerShape(Spacing.lg),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)
                 ) {
                     Column(
-                        modifier = Modifier.fillMaxWidth().padding(Spacing.lg),
+                        modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(Spacing.lg),
                         verticalArrangement = Arrangement.spacedBy(Spacing.sm)
                     ) {
-                        HorizontalPager(
+                        if (button.popupPages.size == 1) button.popupPages.first().invoke()
+                        else HorizontalPager(
                             state = pagerState,
                             modifier = Modifier.animateContentSize(),
                             verticalAlignment = Alignment.Top

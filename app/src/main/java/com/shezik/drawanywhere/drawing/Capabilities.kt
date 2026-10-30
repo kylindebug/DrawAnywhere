@@ -4,6 +4,8 @@ import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.RectF
+import android.graphics.PorterDuff
+import android.graphics.PorterDuffXfermode
 import androidx.compose.ui.geometry.Offset
 import com.shezik.drawanywhere.util.distance
 import com.shezik.drawanywhere.util.distancePointToLineSegment
@@ -24,19 +26,43 @@ interface HitTester {
 
 object PenRenderer : Renderer {
     override fun render(stroke: Stroke, canvas: Canvas, paint: Paint, now: Long) {
-        canvas.drawPath(buildPath(stroke._points), paint)
+        if (stroke.points.size == 1) {
+            val point = stroke.points[0]
+            canvas.drawPoint(point.x, point.y, paint)
+        } else canvas.drawPath(pathFor(stroke), paint)
     }
+
+    internal fun pathFor(stroke: Stroke): Path = stroke.cachedPath
+        ?: buildPath(stroke.points).also { stroke.cachedPath = it }
 
     fun buildPath(points: List<Offset>): Path {
         val p = Path()
         if (points.isEmpty()) return p
         p.moveTo(points[0].x, points[0].y)
-        points.zipWithNext().forEachIndexed { i, (a, b) ->
+        for (i in 0 until points.lastIndex) {
+            val a = points[i]; val b = points[i + 1]
             val mx = (a.x + b.x) / 2f; val my = (a.y + b.y) / 2f
             if (i == 0) p.lineTo(mx, my) else p.quadTo(a.x, a.y, mx, my)
         }
         p.lineTo(points.last().x, points.last().y)
         return p
+    }
+}
+
+object PixelEraserRenderer : Renderer {
+    private val clearMode by lazy { PorterDuffXfermode(PorterDuff.Mode.CLEAR) }
+
+    override fun render(stroke: Stroke, canvas: Canvas, paint: Paint, now: Long) {
+        val previousMode = paint.xfermode
+        val previousAlpha = paint.alpha
+        try {
+            paint.xfermode = clearMode
+            paint.alpha = 255
+            PenRenderer.render(stroke, canvas, paint, now)
+        } finally {
+            paint.xfermode = previousMode
+            paint.alpha = previousAlpha
+        }
     }
 }
 
@@ -76,7 +102,7 @@ object LaserRenderer : Renderer {
             else ((ttl - elapsed) / (ttl * (1f - FADE_START))).coerceIn(0f, 1f)
 
         val baseAlpha = paint.alpha.toFloat()
-        val path = PenRenderer.buildPath(stroke.points)
+        val path = PenRenderer.pathFor(stroke)
 
         // Glow: wider and dimmer, derived from the stroke's own color/alpha
         paint.strokeWidth = stroke.width * GLOW_WIDTH

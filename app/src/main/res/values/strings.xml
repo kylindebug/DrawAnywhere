@@ -40,4 +40,7 @@
     <string name="unlock_all">Unlock all</string>
     <string name="copyright">© 2025–2026 shezik, licensed under AGPLv3 or any later version.</string>
     <string name="licenses" >App icon by Solar Icons, licensed under CC BY 4.0.</string>
+    <string name="hide_toolbar_items">Hide toolbar items</string>
+    <string name="show_toolbar_items">Show toolbar items</string>
+    <string name="finger_drawing_mode_description">Turn off Finger drawing to draw only with the pen. Use the hand button to operate the app below. Drawing and app interaction are separate modes.</string>
 </resources>

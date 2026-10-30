@@ -57,12 +57,12 @@ data class UiState(
     val toolbarOrientation: ToolbarOrientation = ToolbarOrientation.HORIZONTAL,
     val firstDrawerOpen: Boolean = canvasVisible,
     val secondDrawerOpen: Boolean = false,
+    val toolbarCollapsed: Boolean = false,
 
     val firstDrawerButtons: Set<String> = setOf(
-        "undo", "clear", "tool_controls", "color_picker", "zoom_lock"
+        "undo", "redo", "clear", "tool_controls", "color_picker", "passthrough", "settings"
     ),
     val secondDrawerButtons: Set<String> = setOf(
-        "passthrough", "redo", "settings"
     ),
     val secondDrawerPinnedButtons: Set<String> = emptySet()
 ) {
@@ -86,7 +86,7 @@ class DrawViewModel(
     initialUiState: UiState,
     initialServiceState: ServiceState,
     private val stopService: () -> Unit,
-    private val containsDismissTarget: (Int, Int) -> Boolean,
+    private val containsDismissTarget: (Int, Int) -> Boolean = { _, _ -> false },
 ) : ViewModel() {
     companion object {
         const val TOOLBAR_DIM_DELAY_MS = 3_000L
@@ -134,9 +134,9 @@ class DrawViewModel(
 
     fun resolvePenType(modifier: StrokeModifier) =
         when (modifier) {
-            StrokeModifier.PrimaryButton   -> PenType.StrokeEraser
-            StrokeModifier.SecondaryButton -> PenType.StrokeEraser
-            StrokeModifier.Both            -> PenType.StrokeEraser
+            StrokeModifier.PrimaryButton   -> PenType.PixelEraser
+            StrokeModifier.SecondaryButton -> PenType.PixelEraser
+            StrokeModifier.Both            -> PenType.PixelEraser
             StrokeModifier.None            -> uiState.value.currentPenType
         }
 
@@ -271,7 +271,14 @@ class DrawViewModel(
         _uiState.update { it.copy(toolbarOrientation = orientation) }
 
     fun toggleFirstDrawer() =
-        setFirstDrawerOpen(!uiState.value.firstDrawerOpen)
+        _uiState.update { it.copy(
+            firstDrawerOpen = if (it.toolbarCollapsed) true else !it.firstDrawerOpen,
+            toolbarCollapsed = false,
+            canvasVisible = true,
+        ) }
+
+    fun toggleToolbarCollapsed() =
+        _uiState.update { it.copy(toolbarCollapsed = !it.toolbarCollapsed, firstDrawerOpen = true) }
 
     fun setFirstDrawerOpen(state: Boolean) =
         _uiState.update { it.copy(firstDrawerOpen = state) }

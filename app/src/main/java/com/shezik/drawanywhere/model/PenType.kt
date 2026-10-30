@@ -16,6 +16,7 @@ import com.shezik.drawanywhere.drawing.LaserRenderer
 import com.shezik.drawanywhere.drawing.OvalRenderer
 import com.shezik.drawanywhere.drawing.PenRenderer
 import com.shezik.drawanywhere.drawing.PixelEraserTool
+import com.shezik.drawanywhere.drawing.PixelEraserRenderer
 import com.shezik.drawanywhere.drawing.RectRenderer
 import com.shezik.drawanywhere.drawing.Renderer
 import com.shezik.drawanywhere.drawing.SegmentHitTester
@@ -38,7 +39,7 @@ enum class PenType(
     Rectangle(R.string.rectangle, Icons.Default.CropSquare, RectRenderer, EdgeHitTester),
     Ellipse(R.string.ellipse, Icons.Default.RadioButtonUnchecked, OvalRenderer, EdgeHitTester),
     StrokeEraser(R.string.stroke_eraser, InkEraser24Px, PenRenderer, SegmentHitTester, isEraser = true),
-    PixelEraser(R.string.pixel_eraser, Icons.Default.BlurOn, PenRenderer, SegmentHitTester, isEraser = true);
+    PixelEraser(R.string.pixel_eraser, Icons.Default.BlurOn, PixelEraserRenderer, SegmentHitTester, isEraser = true);
 
     val isEphemeral: Boolean get() = ttlMs != null
 

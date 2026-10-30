@@ -5,7 +5,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
-class UndoRedoManager(private val maxDepth: Int = 50) {
+class UndoRedoManager(private val maxDepth: Int = 1) {
 
     private val undoStack = mutableListOf<DrawAction>()
     private val redoStack = mutableListOf<DrawAction>()
@@ -35,6 +35,7 @@ class UndoRedoManager(private val maxDepth: Int = 50) {
 
     internal fun pushRedo(action: DrawAction) {
         redoStack.add(action)
+        if (redoStack.size > maxDepth) redoStack.removeAt(0)
         updateUndoRedoState()
     }
 

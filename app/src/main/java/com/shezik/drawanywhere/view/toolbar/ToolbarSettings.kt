@@ -68,6 +68,8 @@ internal fun ToolbarControls(
             isChecked = fingerDrawingEnabled,
             onCheckedChange = onChangeFingerDrawingEnabled
         )
+        Text(stringResource(R.string.finger_drawing_mode_description),
+            style = MaterialTheme.typography.bodySmall)
         Button(
             onClick = onQuitApplication,
             modifier = Modifier.fillMaxWidth(),

@@ -5,41 +5,14 @@ import androidx.compose.material.icons.automirrored.filled.Redo
 import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.Delete
-import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.Column
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.unit.dp
 import com.shezik.drawanywhere.R
 import com.shezik.drawanywhere.UiState
 import com.shezik.drawanywhere.model.PenType
-import com.shezik.drawanywhere.view.canvas.LockMode
-
-@Composable
-private fun LockZoomIcon() {
-    val tint = MaterialTheme.colorScheme.onSurface
-    Box(contentAlignment = Alignment.Center) {
-        Icon(
-            Icons.Default.ZoomOutMap,
-            contentDescription = null,
-            tint = tint,
-            modifier = Modifier.fillMaxSize()
-        )
-        Icon(
-            Icons.Default.Lock,
-            contentDescription = null,
-            tint = tint,
-            modifier = Modifier.size(14.dp)
-        )
-    }
-}
 
 internal data class ToolbarButton(
     val id: String,
@@ -76,14 +49,12 @@ internal fun createAllToolbarButtons(
     onChangeVisibleOnStart: (Boolean) -> Unit,
     fingerDrawingEnabled: Boolean,
     onChangeFingerDrawingEnabled: (Boolean) -> Unit,
-    onCycleLockMode: () -> Unit,
-    lockMode: LockMode,
     onQuitApplication: () -> Unit
 ): List<ToolbarButton> = listOf(
     ToolbarButton(
         id = "visibility",
-        icon = if (uiState.canvasVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
-        contentDescription = if (uiState.canvasVisible) stringResource(R.string.hide_canvas) else stringResource(R.string.show_canvas),
+        icon = if (uiState.firstDrawerOpen && !uiState.toolbarCollapsed) Icons.Default.Visibility else Icons.Default.VisibilityOff,
+        contentDescription = if (uiState.firstDrawerOpen && !uiState.toolbarCollapsed) stringResource(R.string.hide_toolbar_items) else stringResource(R.string.show_toolbar_items),
         onClick = onCanvasVisibilityToggle
     ),
     ToolbarButton(
@@ -105,8 +76,10 @@ internal fun createAllToolbarButtons(
         icon = uiState.currentPenType.icon,
         contentDescription = stringResource(R.string.tool_controls),
         popupPages = listOf(
-            { PenTypeSelector(currentPenType = uiState.currentPenType, onPenTypeSwitch = onPenTypeSwitch) },
-            { PenControls(penConfig = uiState.currentPenConfig, onStrokeWidthChange = onStrokeWidthChange, onAlphaChange = onAlphaChange, alphaEnabled = !uiState.currentPenType.isEraser) }
+            { Column {
+                PenTypeSelector(currentPenType = uiState.currentPenType, onPenTypeSwitch = onPenTypeSwitch)
+                PenControls(penConfig = uiState.currentPenConfig, onStrokeWidthChange = onStrokeWidthChange, onAlphaChange = onAlphaChange, alphaEnabled = !uiState.currentPenType.isEraser)
+            } }
         )
     ),
     ToolbarButton(
@@ -123,18 +96,6 @@ internal fun createAllToolbarButtons(
                 recentColors = uiState.recentColors
             ) }
         )
-    ),
-    ToolbarButton(
-        id = "zoom_lock",
-        icon = if (lockMode == LockMode.NONE) Icons.Default.LockOpen else Icons.Default.Lock,
-        iconContent = if (lockMode == LockMode.ZOOM) {{ LockZoomIcon() }} else null,
-        contentDescription = when (lockMode) {
-            LockMode.NONE -> stringResource(R.string.lock_zoom)
-            LockMode.ZOOM -> stringResource(R.string.lock_all)
-            LockMode.ALL -> stringResource(R.string.unlock_all)
-        },
-        isEnabled = uiState.canvasVisible,
-        onClick = onCycleLockMode
     ),
     ToolbarButton(
         id = "passthrough",

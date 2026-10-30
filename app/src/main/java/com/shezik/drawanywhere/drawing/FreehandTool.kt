@@ -22,7 +22,9 @@ class FreehandTool(private val ctx: ToolContext) : StrokeTool {
 
     override fun onMove(point: Offset) {
         val stroke = ctx.strokes.lastOrNull() ?: return
+        if (stroke.points.lastOrNull() == point) return
         stroke._points.add(point)
+        stroke.invalidateGeometry()
         stroke.modifiedAt = System.currentTimeMillis()
     }
 

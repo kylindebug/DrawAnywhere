@@ -93,4 +93,19 @@ class UndoRedoManagerTest {
         assertNull(m.popUndo())
         assertFalse(m.canUndo.first())
     }
+
+    @Test
+    fun defaultRetainsOnlyTheLatestUndoAndRedo() = runTest {
+        val m = UndoRedoManager()
+        val old = addAction()
+        val latest = addAction()
+        m.push(old)
+        m.push(latest)
+        assertSame(latest, m.popUndo())
+        assertNull(m.popUndo())
+        m.pushRedo(old)
+        m.pushRedo(latest)
+        assertSame(latest, m.popRedo())
+        assertNull(m.popRedo())
+    }
 }
