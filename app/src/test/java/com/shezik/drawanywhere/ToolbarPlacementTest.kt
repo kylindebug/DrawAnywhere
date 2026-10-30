@@ -7,6 +7,22 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class ToolbarPlacementTest {
+    @Test fun measureProvidesTheNewAnchorBeforeTheExpandedSurfaceIsPresented() {
+        val screen = IntSize(1848, 2934)
+        val anchor = Offset(1681f, 2870f)
+        for (orientation in ToolbarOrientation.entries) {
+            for (length in listOf(224, 910, 224)) {
+                val size = if (orientation == ToolbarOrientation.HORIZONTAL) IntSize(length, 126)
+                    else IntSize(126, length)
+                val eye = ToolbarPlacement.eyeOffset(size, 63f, orientation, true)
+                val origin = ToolbarPlacement.position(anchor, eye, size, screen)
+                assertEquals(anchor, origin + eye)
+                assertTrue(origin.x + size.width <= screen.width)
+                assertTrue(origin.y + size.height <= screen.height)
+            }
+        }
+    }
+
     @Test fun repeatedOpenCloseAtNinePositionsPreservesAnchorAndDirection() {
         val screen = IntSize(1848, 2934)
         for (orientation in ToolbarOrientation.entries) {

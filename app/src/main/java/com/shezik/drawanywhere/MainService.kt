@@ -47,6 +47,7 @@ import com.shezik.drawanywhere.view.ToolbarLifecycleOwner
 import com.shezik.drawanywhere.view.canvas.NativeDrawCanvasView
 import com.shezik.drawanywhere.view.toolbar.DrawToolbar
 import com.shezik.drawanywhere.view.toolbar.ToolbarPlacement
+import com.shezik.drawanywhere.view.toolbar.ToolbarOrientation
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -124,7 +125,7 @@ class MainService : Service() {
                 viewModel = viewModel,
                 expandTowardStart = toolbarExpandsTowardStart,
                 onBeforeExpand = ::chooseToolbarExpansion,
-                onEyeLayout = ::onToolbarEyeLayout,
+                onGeometryMeasured = ::onToolbarMeasured,
                 onDragPosition = { local ->
                     viewModel.onDismissDragMove(local + toolbarWindowOrigin() -
                         viewModel.serviceState.value.toolbarPosition)
@@ -141,7 +142,13 @@ class MainService : Service() {
                     LayoutParams.FLAG_NOT_TOUCH_MODAL or
                     LayoutParams.FLAG_LAYOUT_IN_SCREEN,
             PixelFormat.TRANSLUCENT
-        ).apply { gravity = Gravity.TOP or Gravity.START }
+        ).apply {
+            gravity = Gravity.TOP or Gravity.LEFT
+            windowAnimations = 0
+            // Position animations are separate from enter/exit animations.
+            // Resizing an end-anchored window also moves its top-left corner.
+            if (Build.VERSION.SDK_INT >= 34) setCanPlayMoveAnimation(false)
+        }
 
         applyToolbarPosition(toolbarParams, initialServiceState)
         // ---------------------------------------
@@ -241,8 +248,17 @@ class MainService : Service() {
         val eye = eyeInWindow ?: Offset(radius, radius)
         val position = ToolbarPlacement.position(origin + Offset(radius, radius), eye,
             measuredToolbarSize, IntSize(screenWidth, screenHeight)).round()
-        params.x = position.x
-        params.y = position.y
+        val reverseHorizontal = toolbarExpandsTowardStart &&
+            viewModel.uiState.value.toolbarOrientation == ToolbarOrientation.HORIZONTAL
+        val reverseVertical = toolbarExpandsTowardStart &&
+            viewModel.uiState.value.toolbarOrientation == ToolbarOrientation.VERTICAL
+        // Keep the eye-side window edge fixed. Repositioning a TOP/LEFT window
+        // for every size change can trigger a system move animation, displaying
+        // the expanded surface beyond the screen before sliding it back.
+        params.gravity = (if (reverseHorizontal) Gravity.RIGHT else Gravity.LEFT) or
+            (if (reverseVertical) Gravity.BOTTOM else Gravity.TOP)
+        params.x = if (reverseHorizontal) screenWidth - position.x - measuredToolbarSize.width else position.x
+        params.y = if (reverseVertical) screenHeight - position.y - measuredToolbarSize.height else position.y
         if (origin != state.toolbarPosition) viewModel.setToolbarPosition(origin)
     }
 
@@ -272,7 +288,7 @@ class MainService : Service() {
         return Offset(toolbarParams.x.toFloat(), toolbarParams.y.toFloat())
     }
 
-    private fun onToolbarEyeLayout(localEye: Offset, size: IntSize) {
+    private fun onToolbarMeasured(localEye: Offset, size: IntSize) {
         if (eyeInWindow == localEye && measuredToolbarSize == size) return
         eyeInWindow = localEye
         measuredToolbarSize = size

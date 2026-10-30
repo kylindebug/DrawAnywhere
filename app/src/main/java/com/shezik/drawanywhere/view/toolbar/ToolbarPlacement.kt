@@ -9,6 +9,13 @@ import androidx.compose.ui.window.PopupPositionProvider
 
 /** Keep the eye at its screen position while the surrounding menu changes size. */
 internal object ToolbarPlacement {
+    fun eyeOffset(size: IntSize, inset: Float, orientation: ToolbarOrientation,
+        towardStart: Boolean): Offset = when {
+        towardStart && orientation == ToolbarOrientation.HORIZONTAL -> Offset(size.width - inset, inset)
+        towardStart && orientation == ToolbarOrientation.VERTICAL -> Offset(inset, size.height - inset)
+        else -> Offset(inset, inset)
+    }
+
     fun towardStart(anchor: Offset, screen: IntSize, orientation: ToolbarOrientation): Boolean =
         when (orientation) {
             ToolbarOrientation.HORIZONTAL -> anchor.x > screen.width / 2f

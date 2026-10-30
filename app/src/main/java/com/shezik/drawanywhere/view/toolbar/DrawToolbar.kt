@@ -11,9 +11,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.layout.findRootCoordinates
-import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.dp
@@ -30,7 +29,7 @@ fun DrawToolbar(
     modifier: Modifier = Modifier,
     expandTowardStart: Boolean = false,
     onBeforeExpand: () -> Unit = {},
-    onEyeLayout: (Offset, IntSize) -> Unit = { _, _ -> },
+    onGeometryMeasured: (Offset, IntSize) -> Unit = { _, _ -> },
     onDragPosition: ((Offset) -> Unit)? = null
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -42,6 +41,7 @@ fun DrawToolbar(
     val hScrollState = rememberScrollState()
     val vScrollState = rememberScrollState()
     val compact = uiState.toolbarCollapsed || !uiState.firstDrawerOpen
+    val eyeInset = with(LocalDensity.current) { (Spacing.xs + Spacing.sm + 24.dp).toPx() }
 
     val allButtonsMap = createAllToolbarButtons(
         uiState = uiState,
@@ -73,7 +73,16 @@ fun DrawToolbar(
     ).associateBy { it.id }
 
     DrawAnywhereTheme {
-        BoxWithConstraints {
+        BoxWithConstraints(Modifier.layout { measurable, constraints ->
+            val placeable = measurable.measure(constraints)
+            val size = IntSize(placeable.width, placeable.height)
+            // Window position must be ready during measure, before ViewRoot
+            // resizes/presents the surface. A global-position callback is too late:
+            // it can show the wider toolbar at the old compact origin for a frame.
+            onGeometryMeasured(ToolbarPlacement.eyeOffset(size, eyeInset,
+                uiState.toolbarOrientation, expandTowardStart), size)
+            layout(placeable.width, placeable.height) { placeable.place(0, 0) }
+        }) {
             DraggableToolbarCard(
                 modifier = modifier
                     .wrapContentSize(unbounded = true)
@@ -101,8 +110,7 @@ fun DrawToolbar(
                         if (compact) onBeforeExpand()
                         viewModel.toggleToolbarCollapsed()
                     },
-                    expandTowardStart = expandTowardStart,
-                    onEyeLayout = onEyeLayout
+                    expandTowardStart = expandTowardStart
                 )
             }
         }
@@ -115,8 +123,7 @@ internal fun ToolbarButtonsContainer(
     uiState: com.shezik.drawanywhere.UiState,
     allButtonsMap: Map<String, ToolbarButton>,
     onExpandToggleClick: () -> Unit,
-    expandTowardStart: Boolean = false,
-    onEyeLayout: (Offset, IntSize) -> Unit = { _, _ -> }
+    expandTowardStart: Boolean = false
 ) {
     val orientation = uiState.toolbarOrientation
     val isFirstDrawerOpen = uiState.firstDrawerOpen && !uiState.toolbarCollapsed
@@ -142,10 +149,7 @@ internal fun ToolbarButtonsContainer(
     @Composable
     fun StandaloneButtons() {
         standaloneButtonIds.forEach { id -> allButtonsMap[id]?.let {
-            RenderButton(it, popupAlignment, if (id == "visibility") Modifier.onGloballyPositioned { c ->
-                onEyeLayout(c.positionInRoot() + Offset(c.size.width / 2f, c.size.height / 2f),
-                    c.findRootCoordinates().size)
-            } else Modifier)
+            RenderButton(it, popupAlignment)
         } }
     }
 

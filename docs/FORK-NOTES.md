@@ -96,3 +96,34 @@ After the user deferred simultaneous operation, the experimental service and rou
 - Original app preferences and device rotation/power settings are restored after
   testing; no accessibility service is required. Concurrent finger passthrough
   remains deferred.
+
+## First-frame expansion and system move animation (2026-10-30)
+
+The earlier grid checks above waited for layout to settle. They did not catch the
+user-reported transient where a right-side toolbar first appeared beyond the edge
+and then slid back. Those results must not be read as a transition-frame check.
+
+Toolbar geometry is now reported during measurement, before the resized surface
+is presented, instead of from a global-position callback after layout. Right- and
+bottom-opening toolbars use corresponding window gravity. On Android 14/API 34+
+the toolbar also calls the public
+[`setCanPlayMoveAnimation(false)`](https://developer.android.com/reference/android/view/WindowManager.LayoutParams#setCanPlayMoveAnimation(boolean))
+API: disabling enter/exit animations alone does not disable system position
+animations. Device-wide animation settings are not changed. This animation API
+is version-guarded; transition behavior below API 34 has not been validated.
+
+The application APK passed 113 JVM tests and lint (0 errors, 37 warnings). On
+SM-X910, a four-cycle recording at the same right-edge position was decoded and
+checked frame by frame using open/closed eye template matching. All 359 final
+frames matched the same horizontal eye coordinate (841 in the half-resolution
+recording); no frame was flagged for displacement or low-confidence matching.
+The old-build comparison flagged 194 of 399 frames. Sample contact sheets were
+also inspected visually. This is a targeted transition regression, separate from
+the earlier steady-state grid and instrumentation results.
+
+The matching four-cycle bottom-edge recording also passed: all 357 frames kept
+the eye at vertical coordinate 1435 in the half-resolution recording. The final
+APK additionally passed nine-region grid checks for both toolbar orientations on
+the portrait tablet (18 placements, 54 open/close cycles). No new instrumentation
+suite result is claimed for this revision; its validation uses the 113 unit tests,
+physical grid checks, and the two complete transition recordings above.
