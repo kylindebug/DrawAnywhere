@@ -2,6 +2,8 @@
 
 This branch changes the toolbar and pen input while retaining the upstream AGPL-3.0 license.
 
+The current deployment includes toolbar changes and local side-button erasure. Requirement 2 (simultaneous pen drawing and finger passthrough) is deferred; ordinary drawing/passthrough modes are retained.
+
 ## Toolbar
 
 - Order: eye, undo, redo, clear, pen, color, hand, settings, collapse.
@@ -12,24 +14,15 @@ This branch changes the toolbar and pen input while retaining the upstream AGPL-
 - Presets, recent colors, HSV wheel and hex input share one scrollable color panel.
 - The viewport-lock button is removed. The hand button still toggles full input passthrough.
 
-## Finger passthrough with S Pen source routing (device-dependent)
+## Drawing and app interaction modes
 
-**Strict simultaneous operation remains unresolved. On the Android 17 emulator, starting a separate virtual touchscreen while a virtual pen stroke was down caused the Android input layer to send `ACTION_CANCEL` to the pen. A physical SM-X910 on Android 16 also reported no overlapping pen/finger contacts during a user-performed raw-input test (details below).** Source routing works for separate finger/pen gestures; it cannot reconstruct motion discarded before it reaches the application. An ADB helper alone is not a demonstrated solution for this device.
+Simultaneous S Pen drawing and finger passthrough is **deferred at the user's request** after the SM-X910 input diagnostic below. The experimental accessibility service, source-routing bridge, and enable-service UI have been removed from this build.
 
-Requires Android 14 (API 34) or newer:
+- Drawing mode: S Pen draws on the overlay. Finger drawing on allows finger ink too; off ignores fingers while retaining S Pen drawing.
+- Hand button: switches the entire canvas between drawing and passthrough. In passthrough mode both pen and finger operate the underlying app.
+- No accessibility service or ADB helper is needed. Only the normal overlay permission is required.
 
-1. Open toolbar Settings and choose **Enable S Pen input**.
-2. In Android Accessibility settings, enable **DrawAnywhere S Pen input**. This is a user-controlled permission and cannot be enabled by the app itself.
-3. Return to the canvas, turn **Finger drawing** off, and leave the hand button in drawing mode.
-4. Fingers operate the underlying app; S Pen is routed to the overlay. Test overlapping gestures on your device: some systems cancel the pen stream when the finger starts. Turn Finger drawing on to draw with either input. Use the hand button for full passthrough, including the pen.
-
-The service subscribes only to `SOURCE_STYLUS` and `SOURCE_BLUETOOTH_STYLUS` through Android's `setMotionEventSources`. Finger events stay in the system's input pipeline; they are not recorded, synthesized or replayed. The service does not request screen-content retrieval, gesture injection or touch exploration. Pen interception stops when full passthrough is selected, the canvas is hidden, finger drawing is enabled, or the drawing service exits. Toolbars and popups receive intercepted pen events in their own local coordinates.
-
-On Android 13 and earlier, or when the accessibility service is disconnected, turning Finger drawing off enables full passthrough; pen drawing is unavailable in that mode. Settings describes this limitation. Enable Finger drawing to use ordinary drawing without the accessibility service.
-
-Android 12+ restricts input through application overlays. During passthrough this fork caps the canvas window alpha to the system's maximum obscuring opacity (normally 0.8). Ink therefore appears slightly lighter in this mode. Apps may independently reject obscured touches. Firmware palm rejection can suppress finger events while S Pen is near the screen, and Android's input filter can cancel streams when devices change; an app cannot recover discarded events. External displays/DeX are not validated. Validate on the target Samsung device before relying on simultaneous operation.
-
-References: [Android motion event interception](https://developer.android.com/reference/android/accessibilityservice/AccessibilityService#onMotionEvent(android.view.MotionEvent)), [source selection](https://developer.android.com/reference/android/accessibilityservice/AccessibilityServiceInfo#setMotionEventSources(int)), [overlay touch restrictions](https://developer.android.com/reference/android/view/WindowManager.LayoutParams#FLAG_NOT_TOUCHABLE).
+Android 12+ restricts input through application overlays. In passthrough mode this fork caps the canvas window alpha to the system's maximum obscuring opacity (normally 0.8), so ink appears slightly lighter. See [Android overlay touch restrictions](https://developer.android.com/reference/android/view/WindowManager.LayoutParams#FLAG_NOT_TOUCHABLE). External displays/DeX remain unvalidated.
 
 ## Side-button eraser
 
@@ -40,11 +33,11 @@ Pixel Eraser cuts line segments at local intersections and sweeps between event 
 ## Validation on a Samsung device
 
 - Finger drawing on: finger ink and S Pen ink; side-button press/release while touching.
-- Finger drawing off + service enabled: continuously scroll a long page with a finger while drawing/erasing with S Pen; verify links, page turns and pinch gestures reach the underlying app.
-- Repeat with S Pen already hovering before the finger touches down; note any firmware palm rejection.
+- Finger drawing off: S Pen still draws and erases; fingers do not draw.
+- Hand button: verify full passthrough to the underlying app, then switch back and resume drawing.
 - Test toolbar and both popups with finger and pen, including long-press dragging the lone eye and dragging while collapsed.
 - Confirm eye/collapse do not clear or disable the canvas; check undo/redo after erasure, zoom and rotation.
-- Disable/re-enable the accessibility service, switch full passthrough, rotate, quit and restart; verify the underlying app receives the pen after quitting.
+- Switch full passthrough, rotate, quit and restart; verify the underlying app receives the pen after quitting.
 
 Build: use JDK 21 (JetBrains, as pinned by upstream), Android SDK 37, and the included Gradle wrapper. Run `:app:testDebugUnitTest :app:assembleDebug :app:compileDebugAndroidTestKotlin`; run `:app:connectedDebugAndroidTest` on a test device/emulator for instrumentation coverage.
 
@@ -54,8 +47,7 @@ Build: use JDK 21 (JetBrains, as pinned by upstream), Android SDK 37, and the in
 - 43 instrumentation tests passed on the Android 17/API 37.2 emulator, including side-button transitions and dragging the hidden eye. Espresso was updated from the old transitive 3.5.0 to 3.7.0 to support the emulator.
 - GitHub Actions build and instrumentation jobs passed on commit `e884051` (compile SDK 37.0, emulator API 35).
 - Visual checks confirmed the requested toolbar order and merged pen controls/line preview on a tablet-size display.
-- A virtual hardware pen created with Android `uinput` reached the accessibility service and drew ink while Finger drawing was off. Ordinary `adb shell input stylus` injection bypasses that filter and is not evidence for this route.
-- Overlapping independent `uinput` pen and finger streams produced a pen cancellation on Android 17. This is an unresolved limitation of requirement 2, not a passing simultaneous-input test.
+- Historical experiment (removed from the deployment build): a virtual hardware pen created with Android `uinput` reached the accessibility service and drew ink while Finger drawing was off. Overlapping independent pen and finger streams produced a pen cancellation on Android 17. Requirement 2 was subsequently deferred.
 
 ## Physical input diagnostic (2026-10-30)
 
@@ -65,3 +57,12 @@ Build: use JDK 21 (JetBrains, as pinned by upstream), Android SDK 37, and the in
 - This indicates suppression before the app-level input route in this test. It does not identify the exact firmware/driver component, establish behavior for every Samsung device, or prove that rooting would fix it. No applicable switch was identified in the inspected settings and exposed driver command lists.
 - The probe released the pen and was removed. No system settings, original app installation, or app data were changed. This was a hardware input diagnostic, not an installation or end-to-end validation of this APK on Samsung hardware.
 - The final application commit `0985eab` also passed [GitHub Actions build and API 35 instrumentation](https://github.com/kylindebug/DrawAnywhere/actions/runs/40994348377).
+
+## SM-X910 deployment (2026-10-30)
+
+After the user deferred simultaneous operation, the experimental service and routing UI were removed. The resulting APK was signed, installed on SM-X910, granted the normal overlay permission, and launched. The drawing foreground service and visible toolbar were confirmed. No original installation was present in user 0 at deployment time.
+
+- Rebuilt successfully with 106 JVM tests passing and lint completing without errors.
+- Seven selected instrumentation tests passed on the actual Android 16 tablet: four `StylusInputTest` cases and three `ToolbarGestureTest` cases. These exercise synthetic pen/button events, erasure undo/redo, finger filtering, canvas preservation, and toolbar drag/rendering; they do not constitute a manual physical S Pen acceptance test.
+- Removed the test-only APK after testing. No accessibility service is required or enabled for this build.
+- Earlier emulator/CI results above refer to the earlier experimental build, not this deployment revision.

@@ -25,7 +25,6 @@ import android.content.pm.ServiceInfo
 import android.graphics.PixelFormat
 import android.graphics.Point
 import android.hardware.input.InputManager
-import android.view.MotionEvent
 import android.os.Build
 import android.os.IBinder
 import android.view.Gravity
@@ -42,14 +41,12 @@ import com.shezik.drawanywhere.view.DismissTargetView
 import com.shezik.drawanywhere.view.ToolbarLifecycleOwner
 import com.shezik.drawanywhere.view.canvas.NativeDrawCanvasView
 import com.shezik.drawanywhere.view.toolbar.DrawToolbar
-import com.shezik.drawanywhere.input.StylusInputBridge
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.flow.combine
 
 class MainService : Service() {
     companion object {
@@ -68,8 +65,6 @@ class MainService : Service() {
     private lateinit var preferencesManager: PreferencesManager
     private lateinit var viewModel: DrawViewModel
     private val serviceScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
-    private var stylusTarget: View? = null
-    private var splitInputActive = false
     private var previousInputState: Triple<Boolean, Boolean, Boolean>? = null
 
     override fun onCreate() {
@@ -109,7 +104,7 @@ class MainService : Service() {
                     LayoutParams.FLAG_LAYOUT_IN_SCREEN,
             PixelFormat.TRANSLUCENT
         )
-        applyCanvasPassthrough(canvasParams, initialUiState.canvasPassthrough || !initialUiState.fingerDrawingEnabled)
+        applyCanvasPassthrough(canvasParams, initialUiState.canvasPassthrough)
 
         // -------- Setup toolbar (Compose) --------
         toolbarLifecycleOwner.start()
@@ -160,19 +155,13 @@ class MainService : Service() {
 
         // Observe UI state changes
         serviceScope.launch {
-            combine(viewModel.uiState, StylusInputBridge.connected) { state, connected -> state to connected }
-                .collect { (state, connected) ->
-                val splitInput = connected && !state.fingerDrawingEnabled &&
-                    !state.canvasPassthrough && state.canvasVisible
+            viewModel.uiState.collect { state ->
                 val inputState = Triple(state.canvasVisible, state.canvasPassthrough, state.fingerDrawingEnabled)
-                if (splitInputActive != splitInput || previousInputState != inputState) {
+                if (previousInputState != inputState) {
                     canvasView.cancelInput()
-                    stylusTarget = null
-                    splitInputActive = splitInput
                     previousInputState = inputState
                 }
-                StylusInputBridge.setListener(if (splitInput) ::dispatchStylusEvent else null)
-                applyCanvasPassthrough(canvasParams, state.canvasPassthrough || !state.fingerDrawingEnabled)
+                applyCanvasPassthrough(canvasParams, state.canvasPassthrough)
                 windowManager.updateViewLayout(canvasView, canvasParams)
                 canvasView.visibility = if (state.canvasVisible) View.VISIBLE else View.GONE
             }
@@ -220,48 +209,6 @@ class MainService : Service() {
         else 1f
     }
 
-    private fun contains(view: View, event: MotionEvent): Boolean {
-        val location = IntArray(2)
-        view.getLocationOnScreen(location)
-        return event.x >= location[0] && event.x < location[0] + view.width &&
-            event.y >= location[1] && event.y < location[1] + view.height
-    }
-
-    private fun dispatchStylusEvent(event: MotionEvent) {
-        if ((0 until event.pointerCount).none {
-            event.getToolType(it) == MotionEvent.TOOL_TYPE_STYLUS ||
-                event.getToolType(it) == MotionEvent.TOOL_TYPE_ERASER
-        }) return
-        val hover = event.actionMasked == MotionEvent.ACTION_HOVER_ENTER ||
-            event.actionMasked == MotionEvent.ACTION_HOVER_MOVE || event.actionMasked == MotionEvent.ACTION_HOVER_EXIT
-        if (event.actionMasked == MotionEvent.ACTION_DOWN || hover) {
-            val popup = StylusInputBridge.topPopup()
-            stylusTarget = when {
-                popup != null && contains(popup.first, event) -> popup.first
-                popup != null -> {
-                    if (!hover) popup.second.invoke()
-                    null // Dismiss without drawing behind the popup.
-                }
-                contains(toolbarView, event) -> toolbarView
-                else -> canvasView
-            }
-        }
-        val target = stylusTarget ?: return
-        if (!target.isAttachedToWindow) { stylusTarget = null; return }
-        val location = IntArray(2)
-        target.getLocationOnScreen(location)
-        val local = MotionEvent.obtain(event)
-        try {
-            local.offsetLocation(-location[0].toFloat(), -location[1].toFloat())
-            if (target === canvasView) canvasView.onTouchEvent(local)
-            else if (hover || event.actionMasked == MotionEvent.ACTION_BUTTON_PRESS ||
-                event.actionMasked == MotionEvent.ACTION_BUTTON_RELEASE) target.dispatchGenericMotionEvent(local)
-            else target.dispatchTouchEvent(local)
-        } finally { local.recycle() }
-        if (event.actionMasked == MotionEvent.ACTION_UP || event.actionMasked == MotionEvent.ACTION_CANCEL)
-            stylusTarget = null
-    }
-
     private fun applyToolbarPosition(params: LayoutParams, state: ServiceState) {
         val rounded = state.toolbarPosition.round()
         val (screenWidth, screenHeight) = getUsableScreenSize(windowManager)
@@ -288,7 +235,6 @@ class MainService : Service() {
     override fun onDestroy() {
         super.onDestroy()
         isRunning = false
-        StylusInputBridge.setListener(null)
         if (::canvasView.isInitialized) canvasView.cancelInput()
         serviceScope.cancel()
         if (::toolbarView.isInitialized && toolbarView.isAttachedToWindow)

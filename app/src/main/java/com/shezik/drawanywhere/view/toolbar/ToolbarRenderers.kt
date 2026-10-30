@@ -20,8 +20,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.platform.LocalConfiguration
-import androidx.compose.ui.platform.LocalView
-import com.shezik.drawanywhere.input.StylusInputBridge
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
@@ -136,11 +134,6 @@ internal fun PopupToolbarButton(
                 onDismissRequest = { isPopupOpen = false },
                 properties = PopupProperties(focusable = true)
             ) {
-                val popupView = LocalView.current
-                DisposableEffect(popupView) {
-                    StylusInputBridge.registerPopup(popupView) { isPopupOpen = false }
-                    onDispose { StylusInputBridge.unregisterPopup(popupView) }
-                }
                 Card(
                     modifier = Modifier.width(280.dp)
                         .heightIn(max = (LocalConfiguration.current.screenHeightDp - 32).coerceAtLeast(120).dp),

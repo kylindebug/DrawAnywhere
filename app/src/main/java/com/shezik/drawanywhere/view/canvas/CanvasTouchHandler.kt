@@ -159,8 +159,8 @@ class CanvasTouchHandler(
         private set
 
     fun handleEvent(event: MotionEvent): Boolean {
-        // Ignore fingers in stylus-only mode. Cross-app passthrough is handled by
-        // the accessibility source subscription + non-touchable canvas window.
+        // Ignore fingers in pen-only drawing mode. The hand button separately
+        // switches the whole canvas to passthrough for underlying apps.
         if (!fingerDrawingEnabled() && event.actionMasked != MotionEvent.ACTION_CANCEL &&
             (0 until event.pointerCount).none { isStylus(event, it) }) return false
         // Track pointer position for size preview

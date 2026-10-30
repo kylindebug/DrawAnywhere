@@ -5,13 +5,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.ui.platform.LocalContext
-import android.os.Build
-import android.content.Intent
-import android.provider.Settings
-import com.shezik.drawanywhere.input.StylusInputBridge
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.ColorFilter
@@ -75,20 +68,8 @@ internal fun ToolbarControls(
             isChecked = fingerDrawingEnabled,
             onCheckedChange = onChangeFingerDrawingEnabled
         )
-        val connected by StylusInputBridge.connected.collectAsState()
-        val context = LocalContext.current
-        Text(stringResource(when {
-            Build.VERSION.SDK_INT < 34 -> R.string.stylus_requires_android14
-            connected -> R.string.stylus_service_ready
-            else -> R.string.stylus_service_description
-        }), style = MaterialTheme.typography.bodySmall)
-        if (Build.VERSION.SDK_INT >= 34 && !connected) {
-            TextButton(onClick = {
-                onChangeFingerDrawingEnabled(false)
-                context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
-                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-            }) { Text(stringResource(R.string.enable_stylus_service)) }
-        }
+        Text(stringResource(R.string.finger_drawing_mode_description),
+            style = MaterialTheme.typography.bodySmall)
         Button(
             onClick = onQuitApplication,
             modifier = Modifier.fillMaxWidth(),
