@@ -228,7 +228,6 @@ class MainService : Service() {
     }
 
     private fun dispatchStylusEvent(event: MotionEvent) {
-        if (Build.VERSION.SDK_INT >= 29 && event.displayId != canvasView.display?.displayId) return
         if ((0 until event.pointerCount).none {
             event.getToolType(it) == MotionEvent.TOOL_TYPE_STYLUS ||
                 event.getToolType(it) == MotionEvent.TOOL_TYPE_ERASER

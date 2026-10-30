@@ -195,6 +195,13 @@ class CanvasTouchHandler(
             logPointers(event, eventActionName(event.actionMasked))
         }
 
+        // A pen arriving during a finger gesture takes over drawing; palm/finger
+        // pointers must never turn its stroke into a pan/zoom gesture.
+        if (isMultiTouch && (0 until event.pointerCount).any { isStylus(event, it) }) {
+            exitMultiTouch()
+            cancelInput()
+        }
+
         // ① Multi-touch active → dispatch
         if (isMultiTouch && handleMultiTouchMode(event)) return true
 
