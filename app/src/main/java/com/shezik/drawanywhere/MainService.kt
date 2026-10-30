@@ -22,6 +22,7 @@ import android.app.NotificationManager
 import android.app.Service
 import android.content.Intent
 import android.content.pm.ServiceInfo
+import android.content.res.Configuration
 import android.graphics.PixelFormat
 import android.graphics.Point
 import android.hardware.input.InputManager
@@ -35,12 +36,17 @@ import android.view.WindowManager.LayoutParams
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.unit.round
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import com.shezik.drawanywhere.view.DismissTargetView
 import com.shezik.drawanywhere.view.ToolbarLifecycleOwner
 import com.shezik.drawanywhere.view.canvas.NativeDrawCanvasView
 import com.shezik.drawanywhere.view.toolbar.DrawToolbar
+import com.shezik.drawanywhere.view.toolbar.ToolbarPlacement
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -66,6 +72,10 @@ class MainService : Service() {
     private lateinit var viewModel: DrawViewModel
     private val serviceScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     private var previousInputState: Triple<Boolean, Boolean, Boolean>? = null
+    private var toolbarExpandsTowardStart by mutableStateOf(false)
+    private var eyeInWindow: Offset? = null
+    private var measuredToolbarSize = IntSize.Zero
+    private lateinit var toolbarParams: LayoutParams
 
     override fun onCreate() {
         super.onCreate()
@@ -108,12 +118,22 @@ class MainService : Service() {
 
         // -------- Setup toolbar (Compose) --------
         toolbarLifecycleOwner.start()
+        chooseToolbarExpansion()
         toolbarView = ComposeView(this).apply {
-            setContent { DrawToolbar(viewModel = viewModel) }
+            setContent { DrawToolbar(
+                viewModel = viewModel,
+                expandTowardStart = toolbarExpandsTowardStart,
+                onBeforeExpand = ::chooseToolbarExpansion,
+                onEyeLayout = ::onToolbarEyeLayout,
+                onDragPosition = { local ->
+                    viewModel.onDismissDragMove(local + toolbarWindowOrigin() -
+                        viewModel.serviceState.value.toolbarPosition)
+                }
+            ) }
         }
         toolbarLifecycleOwner.attachTo(toolbarView)
 
-        val toolbarParams = LayoutParams(
+        toolbarParams = LayoutParams(
             LayoutParams.WRAP_CONTENT,
             LayoutParams.WRAP_CONTENT,
             LayoutParams.TYPE_APPLICATION_OVERLAY,
@@ -210,13 +230,65 @@ class MainService : Service() {
     }
 
     private fun applyToolbarPosition(params: LayoutParams, state: ServiceState) {
-        val rounded = state.toolbarPosition.round()
         val (screenWidth, screenHeight) = getUsableScreenSize(windowManager)
-        params.x = rounded.x.coerceIn(0, (screenWidth - toolbarView.width).coerceAtLeast(0))
-        params.y = rounded.y.coerceIn(0, (screenHeight - toolbarView.height).coerceAtLeast(0))
-        viewModel.setToolbarPosition(
-            Offset(params.x.toFloat(), params.y.toFloat())
+        // Persist the compact eye's origin, never the expanded window's origin.
+        // Layout callbacks must not write the measured window position back into
+        // that anchor: doing so makes expansion drift and can oscillate forever.
+        val radius = 36f * resources.displayMetrics.density
+        val origin = Offset(
+            state.toolbarPosition.x.coerceIn(0f, (screenWidth - 2 * radius).coerceAtLeast(0f)),
+            state.toolbarPosition.y.coerceIn(0f, (screenHeight - 2 * radius).coerceAtLeast(0f)))
+        val eye = eyeInWindow ?: Offset(radius, radius)
+        val position = ToolbarPlacement.position(origin + Offset(radius, radius), eye,
+            measuredToolbarSize, IntSize(screenWidth, screenHeight)).round()
+        params.x = position.x
+        params.y = position.y
+        if (origin != state.toolbarPosition) viewModel.setToolbarPosition(origin)
+    }
+
+    private fun chooseToolbarExpansion() {
+        settleToolbarAnchor()
+        val (width, height) = getUsableScreenSize(windowManager)
+        val radius = 36f * resources.displayMetrics.density
+        toolbarExpandsTowardStart = ToolbarPlacement.towardStart(
+            viewModel.serviceState.value.toolbarPosition + Offset(radius, radius),
+            IntSize(width, height), viewModel.uiState.value.toolbarOrientation
         )
+    }
+
+    private fun settleToolbarAnchor() {
+        val eye = eyeInWindow ?: return
+        if (!::toolbarParams.isInitialized) return
+        val radius = 36f * resources.displayMetrics.density
+        viewModel.setToolbarPosition(toolbarWindowOrigin() + eye - Offset(radius, radius))
+    }
+
+    private fun toolbarWindowOrigin(): Offset {
+        if (::toolbarView.isInitialized && toolbarView.isAttachedToWindow) {
+            val location = IntArray(2)
+            toolbarView.getLocationOnScreen(location)
+            return Offset(location[0].toFloat(), location[1].toFloat())
+        }
+        return Offset(toolbarParams.x.toFloat(), toolbarParams.y.toFloat())
+    }
+
+    private fun onToolbarEyeLayout(localEye: Offset, size: IntSize) {
+        if (eyeInWindow == localEye && measuredToolbarSize == size) return
+        eyeInWindow = localEye
+        measuredToolbarSize = size
+        if (toolbarView.isAttachedToWindow) {
+            applyToolbarPosition(toolbarParams, viewModel.serviceState.value)
+            windowManager.updateViewLayout(toolbarView, toolbarParams)
+        }
+    }
+
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        if (::toolbarView.isInitialized && toolbarView.isAttachedToWindow) {
+            applyToolbarPosition(toolbarParams, viewModel.serviceState.value)
+            windowManager.updateViewLayout(toolbarView, toolbarParams)
+            chooseToolbarExpansion()
+        }
     }
 
     @Suppress("DEPRECATION")

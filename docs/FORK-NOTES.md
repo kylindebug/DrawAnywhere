@@ -9,6 +9,12 @@ The current deployment includes toolbar changes and local side-button erasure. R
 - Order: eye, undo, redo, clear, pen, color, hand, settings, collapse.
 - Eye hides the other controls, leaving a draggable eye. Long-press and drag to move it.
 - Collapse leaves eye and expand; expand restores the complete toolbar.
+- The collapsed controls can be dragged immediately from either button. Tapping
+  either button expands toward the free side on the configured toolbar axis.
+- The eye is the persistent screen anchor. Initial launch and subsequent expansion
+  use the same direction rule; layout measurement never overwrites that anchor.
+- Folding uses immediate layout changes rather than competing size/visibility
+  animations, avoiding eye flicker and repeated window repositioning.
 - Both toolbar hiding operations preserve the drawing canvas and its input mode.
 - Pen tools, width, opacity and a live line preview share one scrollable panel.
 - Presets, recent colors, HSV wheel and hex input share one scrollable color panel.
@@ -66,3 +72,27 @@ After the user deferred simultaneous operation, the experimental service and rou
 - Seven selected instrumentation tests passed on the actual Android 16 tablet: four `StylusInputTest` cases and three `ToolbarGestureTest` cases. These exercise synthetic pen/button events, erasure undo/redo, finger filtering, canvas preservation, and toolbar drag/rendering; they do not constitute a manual physical S Pen acceptance test.
 - Removed the test-only APK after testing. No accessibility service is required or enabled for this build.
 - Earlier emulator/CI results above refer to the earlier experimental build, not this deployment revision.
+
+## Collapsed toolbar positioning regression (2026-10-30)
+
+- Fixed repeated window displacement during dragging: Compose already accounts for
+  the moving window in pointer deltas. Movement delivered with pointer-up is kept,
+  and saving no longer replaces the requested position with a stale rendered frame.
+- 112 JVM tests passed; debug app/test APK builds and lint passed (0 errors,
+  34 warnings).
+- On SM-X910, checked all nine screen regions with both horizontal and vertical
+  toolbars in both portrait and landscape: 36 placements, three open/close cycles
+  each, 108 cycles total. Eye coordinates remained within two pixels, expansion
+  followed available space, and all toolbar bounds remained on screen.
+- One complete run of seven toolbar gesture tests and four stylus input tests
+  passed on the tablet, with the same application APK and a temporary test-only
+  thread-dump watchdog. The watchdog was removed afterward. Repeated runs also
+  intermittently stalled during test activity setup/transition, including with
+  original rotation settings restored; this instrumentation reliability issue
+  remains unresolved. Interrupted runs are not counted as successful runs.
+- Sampled an expanded-state screen recording at 1 and 4 seconds: the eye stayed in
+  position; the later frame showed the existing idle dimming behavior. This is
+  sampled-frame inspection, not full-video manual review.
+- Original app preferences and device rotation/power settings are restored after
+  testing; no accessibility service is required. Concurrent finger passthrough
+  remains deferred.

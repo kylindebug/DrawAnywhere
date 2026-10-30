@@ -1,14 +1,5 @@
 package com.shezik.drawanywhere.view.toolbar
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.animateContentSize
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
-import androidx.compose.animation.scaleOut
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.spring
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -19,6 +10,11 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.layout.findRootCoordinates
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.dp
 import com.shezik.drawanywhere.DrawViewModel
@@ -31,7 +27,11 @@ enum class ToolbarOrientation { HORIZONTAL, VERTICAL }
 @Composable
 fun DrawToolbar(
     viewModel: DrawViewModel,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    expandTowardStart: Boolean = false,
+    onBeforeExpand: () -> Unit = {},
+    onEyeLayout: (Offset, IntSize) -> Unit = { _, _ -> },
+    onDragPosition: ((Offset) -> Unit)? = null
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val canUndo by viewModel.canUndo.collectAsState()
@@ -41,13 +41,17 @@ fun DrawToolbar(
     val haptics = LocalHapticFeedback.current
     val hScrollState = rememberScrollState()
     val vScrollState = rememberScrollState()
+    val compact = uiState.toolbarCollapsed || !uiState.firstDrawerOpen
 
     val allButtonsMap = createAllToolbarButtons(
         uiState = uiState,
         canUndo = canUndo,
         canRedo = canRedo,
         canClearCanvas = canClearCanvas,
-        onCanvasVisibilityToggle = viewModel::toggleFirstDrawer,
+        onCanvasVisibilityToggle = {
+            if (compact) onBeforeExpand()
+            viewModel.toggleFirstDrawer()
+        },
         onCanvasPassthroughToggle = viewModel::toggleCanvasPassthrough,
         onClearCanvas = viewModel::clearCanvas,
         onUndo = viewModel::undo,
@@ -57,7 +61,10 @@ fun DrawToolbar(
         onPresetColorChange = viewModel::setPresetColor,
         onStrokeWidthChange = viewModel::setStrokeWidth,
         onAlphaChange = viewModel::setStrokeAlpha,
-        onChangeOrientation = viewModel::setToolbarOrientation,
+        onChangeOrientation = {
+            viewModel.setToolbarOrientation(it)
+            onBeforeExpand()
+        },
         onChangeAutoClearCanvas = viewModel::setAutoClearCanvas,
         onChangeVisibleOnStart = viewModel::setVisibleOnStart,
         fingerDrawingEnabled = uiState.fingerDrawingEnabled,
@@ -74,22 +81,28 @@ fun DrawToolbar(
                     .heightIn(max = maxHeight)
                     .scrollFadingEdges(hScrollState, false)
                     .scrollFadingEdges(vScrollState, true)
-                    .horizontalScroll(hScrollState)
-                    .verticalScroll(vScrollState)
+                    .horizontalScroll(hScrollState, enabled = !compact)
+                    .verticalScroll(vScrollState, enabled = !compact)
                     .padding(Spacing.xs),
                 haptics = haptics,
                 onPositionChange = viewModel::updateToolbarPosition,
-                onPositionSaved = viewModel::saveToolbarPosition,
+                onPositionSaved = { viewModel.saveToolbarPosition() },
                 onToolbarInteracted = viewModel::resetToolbarTimer,
+                dragImmediately = compact,
                 onDragStart = viewModel::onDismissDragStart,
-                onDragPosition = viewModel::onDismissDragMove,
+                onDragPosition = onDragPosition ?: viewModel::onDismissDragMove,
                 onDragEnd = viewModel::onDismissDragEnd,
             ) {
                 ToolbarButtonsContainer(
                     modifier = Modifier.padding(Spacing.sm),
                     uiState = uiState,
                     allButtonsMap = allButtonsMap,
-                    onExpandToggleClick = viewModel::toggleToolbarCollapsed
+                    onExpandToggleClick = {
+                        if (compact) onBeforeExpand()
+                        viewModel.toggleToolbarCollapsed()
+                    },
+                    expandTowardStart = expandTowardStart,
+                    onEyeLayout = onEyeLayout
                 )
             }
         }
@@ -101,7 +114,9 @@ internal fun ToolbarButtonsContainer(
     modifier: Modifier = Modifier,
     uiState: com.shezik.drawanywhere.UiState,
     allButtonsMap: Map<String, ToolbarButton>,
-    onExpandToggleClick: () -> Unit
+    onExpandToggleClick: () -> Unit,
+    expandTowardStart: Boolean = false,
+    onEyeLayout: (Offset, IntSize) -> Unit = { _, _ -> }
 ) {
     val orientation = uiState.toolbarOrientation
     val isFirstDrawerOpen = uiState.firstDrawerOpen && !uiState.toolbarCollapsed
@@ -118,9 +133,6 @@ internal fun ToolbarButtonsContainer(
         ToolbarOrientation.HORIZONTAL -> Alignment.TopCenter
         ToolbarOrientation.VERTICAL -> Alignment.CenterEnd
     }
-    val animMod = Modifier.animateContentSize(
-        animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy)
-    )
     val isDividerVisible = isFirstDrawerOpen &&
         (secondDrawerPinnedButtons.isNotEmpty() || (isSecondDrawerOpen && secondDrawerButtonIds.isNotEmpty()))
     val isExpandButtonVisible = uiState.firstDrawerOpen || uiState.toolbarCollapsed
@@ -128,17 +140,26 @@ internal fun ToolbarButtonsContainer(
     val isHorizontal = orientation == ToolbarOrientation.HORIZONTAL
 
     @Composable
-    fun ToolbarContent() {
-        standaloneButtonIds.forEach { id -> allButtonsMap[id]?.let { RenderButton(it, popupAlignment) } }
-        firstDrawerButtonIds.forEach { id ->
+    fun StandaloneButtons() {
+        standaloneButtonIds.forEach { id -> allButtonsMap[id]?.let {
+            RenderButton(it, popupAlignment, if (id == "visibility") Modifier.onGloballyPositioned { c ->
+                onEyeLayout(c.positionInRoot() + Offset(c.size.width / 2f, c.size.height / 2f),
+                    c.findRootCoordinates().size)
+            } else Modifier)
+        } }
+    }
+
+    @Composable
+    fun FirstDrawer() {
+        (if (expandTowardStart) firstDrawerButtonIds.reversed() else firstDrawerButtonIds).forEach { id ->
             allButtonsMap[id]?.let { btn ->
-                AnimatedVisibility(isFirstDrawerOpen,
-                    enter = fadeIn(tween(300)) + scaleIn(tween(300), initialScale = 0.5f),
-                    exit = fadeOut(tween(300)) + scaleOut(tween(300), targetScale = 0.5f)
-                ) { RenderButton(btn, popupAlignment) }
+                if (isFirstDrawerOpen) RenderButton(btn, popupAlignment)
             }
         }
-        AnimatedVisibility(isDividerVisible, enter = fadeIn(tween(300)), exit = fadeOut(tween(300))) {
+    }
+    @Composable
+    fun Divider() {
+        if (isDividerVisible) {
             if (isHorizontal) VerticalDivider(
                 Modifier.height(24.dp).padding(horizontal = Spacing.sm), thickness = 2.dp,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f))
@@ -146,27 +167,36 @@ internal fun ToolbarButtonsContainer(
                 Modifier.width(24.dp).padding(vertical = Spacing.sm), thickness = 2.dp,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f))
         }
-        secondDrawerButtonIds.forEach { id ->
+    }
+    @Composable
+    fun SecondDrawer() {
+        (if (expandTowardStart) secondDrawerButtonIds.reversed() else secondDrawerButtonIds).forEach { id ->
             allButtonsMap[id]?.let { btn ->
                 val visible = isFirstDrawerOpen && (isSecondDrawerOpen || id in secondDrawerPinnedButtons)
-                AnimatedVisibility(visible,
-                    enter = fadeIn(tween(300)) + scaleIn(tween(300), initialScale = 0.5f),
-                    exit = fadeOut(tween(300)) + scaleOut(tween(300), targetScale = 0.5f)
-                ) { RenderButton(btn, popupAlignment) }
+                if (visible) RenderButton(btn, popupAlignment)
             }
         }
-        AnimatedVisibility(isExpandButtonVisible,
-            enter = fadeIn(tween(300)) + scaleIn(tween(300), initialScale = 0.5f),
-            exit = fadeOut(tween(300)) + scaleOut(tween(300), targetScale = 0.5f)
-        ) { ToolbarExpandButton(Modifier, !uiState.toolbarCollapsed, onExpandToggleClick, orientation) }
+    }
+    @Composable
+    fun ExpandButton() {
+        if (isExpandButtonVisible)
+            ToolbarExpandButton(Modifier, !uiState.toolbarCollapsed, onExpandToggleClick, orientation, expandTowardStart)
+    }
+    @Composable
+    fun ToolbarContent() {
+        if (expandTowardStart) {
+            ExpandButton(); SecondDrawer(); Divider(); FirstDrawer(); StandaloneButtons()
+        } else {
+            StandaloneButtons(); FirstDrawer(); Divider(); SecondDrawer(); ExpandButton()
+        }
     }
 
     if (isHorizontal) {
-        Row(modifier = modifier.then(animMod), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = arrangement) {
+        Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = arrangement) {
             ToolbarContent()
         }
     } else {
-        Column(modifier = modifier.then(animMod), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = arrangement) {
+        Column(modifier = modifier, horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = arrangement) {
             ToolbarContent()
         }
     }

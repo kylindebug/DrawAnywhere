@@ -53,8 +53,8 @@ internal fun createAllToolbarButtons(
 ): List<ToolbarButton> = listOf(
     ToolbarButton(
         id = "visibility",
-        icon = if (uiState.firstDrawerOpen) Icons.Default.Visibility else Icons.Default.VisibilityOff,
-        contentDescription = if (uiState.firstDrawerOpen) stringResource(R.string.hide_toolbar_items) else stringResource(R.string.show_toolbar_items),
+        icon = if (uiState.firstDrawerOpen && !uiState.toolbarCollapsed) Icons.Default.Visibility else Icons.Default.VisibilityOff,
+        contentDescription = if (uiState.firstDrawerOpen && !uiState.toolbarCollapsed) stringResource(R.string.hide_toolbar_items) else stringResource(R.string.show_toolbar_items),
         onClick = onCanvasVisibilityToggle
     ),
     ToolbarButton(

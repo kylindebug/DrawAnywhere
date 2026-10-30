@@ -272,7 +272,7 @@ class DrawViewModel(
 
     fun toggleFirstDrawer() =
         _uiState.update { it.copy(
-            firstDrawerOpen = !it.firstDrawerOpen,
+            firstDrawerOpen = if (it.toolbarCollapsed) true else !it.firstDrawerOpen,
             toolbarCollapsed = false,
             canvasVisible = true,
         ) }
