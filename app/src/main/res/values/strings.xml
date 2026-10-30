@@ -45,6 +45,6 @@
     <string name="stylus_service_name">DrawAnywhere S Pen input</string>
     <string name="stylus_service_description">To draw with S Pen while your fingers operate other apps, enable DrawAnywhere S Pen input in Accessibility settings (Android 14+), then turn off Finger drawing. It receives pen motion only while the canvas is active; it does not read screen content. Without this service, turning off Finger drawing passes all input through.</string>
     <string name="stylus_requires_android14">Simultaneous S Pen drawing and finger passthrough requires Android 14 or newer. On this device, turning off Finger drawing passes all input through.</string>
-    <string name="stylus_service_ready">S Pen input is ready. Turn off Finger drawing to let fingers operate the app below while S Pen draws. The hand button still switches all input to the app below.</string>
+    <string name="stylus_service_ready">S Pen routing is ready. Turn off Finger drawing to send fingers to the app below and pen input to the canvas. Some systems interrupt the pen when a finger touches: test overlapping gestures on your device. The hand button switches all input to the app below.</string>
     <string name="enable_stylus_service">Enable S Pen input</string>
 </resources>
