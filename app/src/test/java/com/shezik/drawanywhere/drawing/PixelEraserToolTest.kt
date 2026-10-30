@@ -8,8 +8,8 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class PixelEraserToolTest {
-    private fun stroke(vararg points: Offset, type: PenType = PenType.Pen) =
-        Stroke(points.toMutableList(), Color.Red, 4f, 0.6f, type)
+    private fun stroke(first: Offset, second: Offset? = null, type: PenType = PenType.Pen) =
+        Stroke(listOfNotNull(first, second).toMutableList(), Color.Red, 4f, 0.6f, type)
 
     private fun eraser(strokes: MutableList<Stroke>, undo: MutableList<DrawAction> = mutableListOf()) =
         PixelEraserTool(ToolContext(strokes,

@@ -3,7 +3,6 @@ package com.shezik.drawanywhere
 import android.view.InputDevice
 import android.view.MotionEvent
 import androidx.compose.ui.geometry.Offset
-import androidx.test.annotation.UiThreadTest
 import androidx.test.platform.app.InstrumentationRegistry
 import com.shezik.drawanywhere.model.*
 import com.shezik.drawanywhere.view.canvas.CanvasTouchHandler
@@ -11,6 +10,8 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class StylusInputTest {
+    private fun onMain(block: () -> Unit) =
+        InstrumentationRegistry.getInstrumentation().runOnMainSync { block() }
     private fun setup(fingers: Boolean = false): Triple<DrawController, DrawViewModel, CanvasTouchHandler> {
         val controller = DrawController(PenConfig())
         val vm = DrawViewModel(controller,
@@ -30,7 +31,7 @@ class StylusInputTest {
         try { handler.handleEvent(event) } finally { event.recycle() }
     }
 
-    @Test @UiThreadTest fun sideButtonCutsLocallyAndReleaseResumesWithoutLifting() {
+    @Test fun sideButtonCutsLocallyAndReleaseResumesWithoutLifting() = onMain {
         val (controller, vm, handler) = setup()
         vm.startStroke(Offset.Zero, StrokeModifier.None)
         vm.updateStroke(Offset(100f, 0f))
@@ -53,7 +54,7 @@ class StylusInputTest {
         assertEquals(2, controller.strokeList.size)
     }
 
-    @Test @UiThreadTest fun buttonStateOnMoveSwitchesToolsInBothDirections() {
+    @Test fun buttonStateOnMoveSwitchesToolsInBothDirections() = onMain {
         val (_, vm, handler) = setup()
         send(handler, MotionEvent.ACTION_DOWN, 0f, 0f)
         send(handler, MotionEvent.ACTION_MOVE, 20f, 0f, MotionEvent.BUTTON_STYLUS_PRIMARY)
@@ -63,7 +64,7 @@ class StylusInputTest {
         send(handler, MotionEvent.ACTION_UP, 40f, 0f)
     }
 
-    @Test @UiThreadTest fun fingersAreIgnoredButStylusStillDraws() {
+    @Test fun fingersAreIgnoredButStylusStillDraws() = onMain {
         val (controller, _, handler) = setup()
         send(handler, MotionEvent.ACTION_DOWN, 10f, 10f, tool = MotionEvent.TOOL_TYPE_FINGER)
         send(handler, MotionEvent.ACTION_UP, 10f, 10f, tool = MotionEvent.TOOL_TYPE_FINGER)
@@ -74,7 +75,7 @@ class StylusInputTest {
         assertEquals(1, controller.strokeList.size)
     }
 
-    @Test @UiThreadTest fun eyeAndCollapsePreserveCanvasAndInputMode() {
+    @Test fun eyeAndCollapsePreserveCanvasAndInputMode() = onMain {
         val (_, vm, _) = setup()
         vm.toggleFirstDrawer()
         assertFalse(vm.uiState.value.firstDrawerOpen)
