@@ -27,6 +27,7 @@ class StrokeEraserTool(private val ctx: ToolContext) : StrokeTool {
         val strokes = ctx.strokes
         for (i in strokes.indices.reversed()) {
             val stroke = strokes[i]
+            if (stroke.penType.isEraser) continue
             val r = stroke.width / 2 + eraserRadius
             if (stroke.penType.hitTester.hitTest(stroke, point, r)) {
                 indexToErase = i
@@ -35,7 +36,7 @@ class StrokeEraserTool(private val ctx: ToolContext) : StrokeTool {
         }
         indexToErase?.let {
             val erased = strokes.removeAt(it)
-            ctx.pushUndo(DrawAction.EraseStroke(erased))
+            ctx.pushUndo(DrawAction.EraseStroke(erased, it))
             ctx.notifyChanged()
         }
     }

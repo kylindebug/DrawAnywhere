@@ -111,6 +111,7 @@ class MainService : Service() {
             LayoutParams.MATCH_PARENT,
             LayoutParams.TYPE_APPLICATION_OVERLAY,
             LayoutParams.FLAG_NOT_FOCUSABLE or
+                    LayoutParams.FLAG_HARDWARE_ACCELERATED or
                     LayoutParams.FLAG_NOT_TOUCH_MODAL or
                     LayoutParams.FLAG_LAYOUT_IN_SCREEN,
             PixelFormat.TRANSLUCENT

@@ -8,6 +8,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.test.platform.app.InstrumentationRegistry
 import com.shezik.drawanywhere.model.PenConfig
 import com.shezik.drawanywhere.model.PenType
+import com.shezik.drawanywhere.drawing.InkRenderer
 import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
@@ -39,13 +40,14 @@ class PixelEraserPerformanceTest {
         val output = File(InstrumentationRegistry.getInstrumentation().targetContext.cacheDir,
             "pixel-eraser-$label.json")
         val samples = JSONArray()
-        val report = JSONObject().put("workload", "100 strokes x 128 points; 12 long sweeps; 3 offscreen renders/sweep")
+        val rounds = InstrumentationRegistry.getArguments().getString("bench_rounds")?.toInt() ?: 12
+        val report = JSONObject().put("workload", "100 strokes x 128 points; $rounds long sweeps; 3 offscreen renders/sweep")
             .put("label", label).put("samples", samples)
         var notifications = 0
         controller.onStrokesChanged = { notifications++ }
         val totalStart = System.nanoTime()
         try {
-            for (round in 0 until 12) {
+            for (round in 0 until rounds) {
                 val before = controller.strokeList.toList()
                 val allocatedBefore = Debug.getRuntimeStat("art.gc.bytes-allocated")?.toLongOrNull() ?: 0L
                 val notifyBefore = notifications
@@ -59,7 +61,7 @@ class PixelEraserPerformanceTest {
                 repeat(3) {
                     bitmap.eraseColor(android.graphics.Color.TRANSPARENT)
                     val renderStart = System.nanoTime()
-                    controller.strokeList.forEach { it.render(canvas, paint) }
+                    InkRenderer.render(canvas, controller.strokeList, paint)
                     renders.put((System.nanoTime() - renderStart) / 1_000_000.0)
                 }
                 val allocatedAfter = Debug.getRuntimeStat("art.gc.bytes-allocated")?.toLongOrNull() ?: 0L
@@ -67,6 +69,8 @@ class PixelEraserPerformanceTest {
                 samples.put(JSONObject().put("round", round).put("erase_ms", (erased - start) / 1_000_000.0)
                     .put("render_ms", renders).put("strokes", after.size)
                     .put("points", after.sumOf { it.points.size })
+                    .put("ink_strokes", after.count { !it.penType.isEraser })
+                    .put("eraser_paths", after.count { it.penType == PenType.PixelEraser })
                     .put("notifications", notifications - notifyBefore)
                     .put("allocated_bytes", allocatedAfter - allocatedBefore))
                 output.writeText(report.toString(2), Charsets.UTF_8)

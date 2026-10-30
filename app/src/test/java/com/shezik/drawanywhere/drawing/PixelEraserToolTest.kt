@@ -8,104 +8,89 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class PixelEraserToolTest {
-    private fun stroke(first: Offset, second: Offset? = null, type: PenType = PenType.Pen) =
-        Stroke(listOfNotNull(first, second).toMutableList(), Color.Red, 4f, 0.6f, type)
+    private fun ink() = Stroke(mutableListOf(Offset.Zero, Offset(100f, 100f)), Color.Red, 40f, 0.6f)
+    private fun tool(strokes: MutableList<Stroke>, history: MutableList<DrawAction> = mutableListOf()) =
+        PixelEraserTool(ToolContext(strokes, PenConfig(penType = PenType.PixelEraser, width = 8f), history::add, {}))
 
-    private fun eraser(strokes: MutableList<Stroke>, undo: MutableList<DrawAction> = mutableListOf()) =
-        PixelEraserTool(ToolContext(strokes,
-            PenConfig(penType = PenType.PixelEraser, width = 20f),
-            onUndoPush = { undo.add(it) }, onChanged = {}))
-
-    @Test fun dotIsErasedAndSavedForUndo() {
-        val original = stroke(Offset(10f, 10f))
+    @Test fun eraserKeepsOriginalInkAndRecordsItsOwnWidth() {
+        val original = ink()
         val strokes = mutableListOf(original)
-        val undo = mutableListOf<DrawAction>()
-        eraser(strokes, undo).apply { onStart(Offset(12f, 12f)); onFinish() }
-        assertTrue(strokes.isEmpty())
-        assertEquals(listOf(original), (undo.single() as DrawAction.CanvasSnapshot).before)
-    }
-
-    @Test fun sparseLineIsCutWithoutDeletingItsEnds() {
-        val original = stroke(Offset.Zero, Offset(100f, 0f))
-        val strokes = mutableListOf(original)
-        eraser(strokes).apply { onStart(Offset(50f, 0f)); onFinish() }
+        val history = mutableListOf<DrawAction>()
+        tool(strokes, history).apply { onStart(Offset(30f, 30f)); onMove(Offset(70f, 70f)); onFinish() }
+        assertSame(original, strokes.first())
         assertEquals(2, strokes.size)
-        assertEquals(Offset.Zero, strokes.first().points.first())
-        assertEquals(Offset(100f, 0f), strokes.last().points.last())
-        assertTrue(strokes.first().points.last().x < 45f)
-        assertTrue(strokes.last().points.first().x > 55f)
-        assertTrue(strokes.all { it.color == original.color && it.alpha == original.alpha && it.width == original.width })
-        assertEquals(2, original.points.size) // snapshot data remains immutable
+        assertEquals(PenType.PixelEraser, strokes.last().penType)
+        assertEquals(8f, strokes.last().width)
+        assertEquals(2, original.points.size)
+        assertSame(strokes.last(), (history.single() as DrawAction.AddStroke).stroke)
     }
 
-    @Test fun fastSweepCutsStrokeBetweenEraserSamples() {
-        val strokes = mutableListOf(stroke(Offset.Zero, Offset(100f, 0f)))
-        val undo = mutableListOf<DrawAction>()
-        eraser(strokes, undo).apply {
-            onStart(Offset(50f, -50f))
-            onMove(Offset(50f, 50f))
-            onFinish()
-        }
-        assertEquals(2, strokes.size)
-        assertEquals(1, undo.size)
-        assertEquals(Offset.Zero, strokes.first().points.first())
-        assertEquals(Offset(100f, 0f), strokes.last().points.last())
+    @Test fun sparseSweepKeepsEntireTrajectoryWhenItEntersInk() {
+        val strokes = mutableListOf(ink())
+        val points = listOf(Offset(-200f, 50f), Offset(-100f, 50f), Offset(200f, 50f))
+        tool(strokes).apply { onStart(points[0]); onMove(points[1]); onMove(points[2]); onFinish() }
+        assertEquals(points, strokes.last().points)
     }
 
-    @Test fun noHitDoesNotCreateUndoEntry() {
-        val original = stroke(Offset.Zero, Offset(100f, 0f))
+    @Test fun emptySpaceDoesNotReplaceUndo() {
+        val strokes = mutableListOf(ink())
+        val history = mutableListOf<DrawAction>()
+        tool(strokes, history).apply { onStart(Offset(200f, 200f)); onMove(Offset(300f, 300f)); onFinish() }
+        assertEquals(1, strokes.size)
+        assertTrue(history.isEmpty())
+        val empty = mutableListOf<Stroke>()
+        tool(empty).apply { onStart(Offset.Zero); onFinish() }
+        assertTrue(empty.isEmpty())
+    }
+
+    @Test fun repeatedErasuresNeverFragmentOrCopyInk() {
+        val original = ink()
         val strokes = mutableListOf(original)
-        val undo = mutableListOf<DrawAction>()
-        eraser(strokes, undo).apply { onStart(Offset(200f, 200f)); onFinish() }
-        assertSame(original, strokes.single())
-        assertTrue(undo.isEmpty())
+        repeat(100) { tool(strokes).apply { onStart(Offset.Zero); onMove(Offset(100f, 100f)); onFinish() } }
+        assertSame(original, strokes.first())
+        assertEquals(1, strokes.count { !it.penType.isEraser })
+        assertEquals(2, original.points.size)
+        assertEquals(202, strokes.sumOf { it.points.size })
     }
 
-    @Test fun shapeInteriorIsNotErased() {
-        val original = stroke(Offset.Zero, Offset(100f, 100f), type = PenType.Rectangle)
-        val strokes = mutableListOf(original)
-        eraser(strokes).apply { onStart(Offset(50f, 50f)); onFinish() }
-        assertSame(original, strokes.single())
+    @Test fun aStationaryEraserRemainsOneDot() {
+        val strokes = mutableListOf(ink())
+        tool(strokes).apply { onStart(Offset.Zero); repeat(10) { onMove(Offset.Zero) }; onFinish() }
+        assertEquals(listOf(Offset.Zero), strokes.last().points)
     }
 
-    @Test fun shapeEdgeIsLocallyCutAndConvertedToInk() {
-        val strokes = mutableListOf(stroke(Offset.Zero, Offset(100f, 100f), type = PenType.Rectangle))
-        eraser(strokes).apply { onStart(Offset(50f, 0f)); onFinish() }
-        assertTrue(strokes.isNotEmpty())
-        assertTrue(strokes.all { it.penType == PenType.Pen })
-        assertTrue(strokes.flatMap { it.points }.contains(Offset(100f, 100f)))
+    @Test fun shapeAndLaserGeometryArePreserved() {
+        val rectangle = ink().copy(penType = PenType.Rectangle)
+        val laser = ink().copy(penType = PenType.Laser)
+        val strokes = mutableListOf(rectangle, laser)
+        tool(strokes).apply { onStart(Offset.Zero); onMove(Offset(100f, 100f)); onFinish() }
+        assertSame(rectangle, strokes[0])
+        assertSame(laser, strokes[1])
+        assertEquals(PenType.PixelEraser, strokes[2].penType)
     }
 
-    @Test fun laserKeepsItsLifetimeAfterErasure() {
-        val original = stroke(Offset.Zero, Offset(100f, 0f), type = PenType.Laser)
-        val strokes = mutableListOf(original)
-        eraser(strokes).apply { onStart(Offset(50f, 0f)); onFinish() }
-        assertEquals(2, strokes.size)
-        assertTrue(strokes.all { it.penType == PenType.Laser && it.createdAt == original.createdAt && it.modifiedAt == original.modifiedAt })
+    @Test fun undoRedoRestoresTheOperationOrderAndOnlyOneStep() {
+        val c = DrawController(PenConfig(width = 40f))
+        c.createStroke(Offset.Zero); c.updateLatestStroke(Offset(100f, 100f)); c.finishStroke()
+        val before = c.strokeList.toList()
+        c.setPenConfig(PenConfig(penType = PenType.PixelEraser, width = 8f))
+        c.createStroke(Offset(50f, 0f)); c.updateLatestStroke(Offset(50f, 100f)); c.finishStroke()
+        val after = c.strokeList.toList()
+        c.undo(); assertEquals(before, c.strokeList); assertFalse(c.canUndo.value)
+        c.redo(); assertEquals(after, c.strokeList); assertFalse(c.canRedo.value)
     }
 
-    @Test fun undoRedoRestoresExactBeforeAndAfterGeometry() {
-        val controller = DrawController(PenConfig())
-        controller.createStroke(Offset.Zero)
-        controller.updateLatestStroke(Offset(100f, 0f))
-        controller.finishStroke()
-        val before = controller.strokeList.toList()
-        controller.setPenConfig(PenConfig(penType = PenType.PixelEraser, width = 20f))
-        controller.createStroke(Offset(50f, -40f))
-        controller.updateLatestStroke(Offset(50f, 40f))
-        controller.finishStroke()
-        val after = controller.strokeList.toList()
-        assertEquals(2, after.size)
-        controller.undo()
-        assertEquals(before, controller.strokeList)
-        controller.redo()
-        assertEquals(after, controller.strokeList)
-    }
-
-    @Test fun emptyAndRepeatedPointsAreSafe() {
-        assertNull(clipOutsideCircle(emptyList(), Offset.Zero, 10f))
-        val strokes = mutableListOf(stroke(Offset.Zero, Offset.Zero))
-        eraser(strokes).apply { onStart(Offset.Zero); onMove(Offset.Zero); onFinish() }
-        assertTrue(strokes.isEmpty())
+    @Test fun strokeEraserSkipsMasksAndUndoRestoresInkBeforeItsMask() {
+        val c = DrawController(PenConfig(width = 40f))
+        c.createStroke(Offset.Zero); c.updateLatestStroke(Offset(100f, 100f)); c.finishStroke()
+        c.setPenConfig(PenConfig(penType = PenType.PixelEraser, width = 8f))
+        c.createStroke(Offset(50f, 50f)); c.finishStroke()
+        val before = c.strokeList.toList()
+        c.setPenConfig(PenConfig(penType = PenType.StrokeEraser, width = 10f))
+        c.createStroke(Offset(50f, 50f)); c.finishStroke()
+        assertEquals(PenType.PixelEraser, c.strokeList.single().penType)
+        assertFalse(c.canClearStrokes.value)
+        c.undo(); assertEquals(before, c.strokeList)
+        c.redo(); assertEquals(PenType.PixelEraser, c.strokeList.single().penType)
     }
 }

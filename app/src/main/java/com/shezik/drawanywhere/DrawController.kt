@@ -27,7 +27,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
 /**
- * Owns the stroke list and undo/redo stack. Drawing logic is delegated to
+ * Owns the ordered ink/transparent-path list and undo/redo stack. Drawing logic is delegated to
  * [StrokeTool] implementations via [PenType.createTool].
  */
 class DrawController(initialConfig: PenConfig) {
@@ -61,7 +61,7 @@ class DrawController(initialConfig: PenConfig) {
     )
 
     private fun notifyChanged() {
-        _canClear.value = _strokeList.isNotEmpty()
+        _canClear.value = _strokeList.any { !it.penType.isEraser }
         onStrokesChanged?.invoke()
     }
 
@@ -103,7 +103,8 @@ class DrawController(initialConfig: PenConfig) {
                 if (_strokeList.remove(action.stroke)) undoRedo.pushRedo(action)
             }
             is DrawAction.EraseStroke -> {
-                _strokeList.add(action.stroke)
+                val index = if (action.index < 0) _strokeList.size else action.index.coerceAtMost(_strokeList.size)
+                _strokeList.add(index, action.stroke)
                 undoRedo.pushRedo(action)
             }
             is DrawAction.ClearStrokes -> {

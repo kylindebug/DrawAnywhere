@@ -24,12 +24,10 @@ data class Stroke(
     val points: List<Offset> get() = _points
 
     internal var cachedPath: Path? = null
-    internal var cachedEraserOutline: List<Offset>? = null
     private var cachedBounds: Rect? = null
 
     internal fun invalidateGeometry() {
         cachedPath = null
-        cachedEraserOutline = null
         cachedBounds = null
     }
 
@@ -59,7 +57,7 @@ data class Stroke(
 
 sealed class DrawAction {
     data class AddStroke(val stroke: Stroke) : DrawAction()
-    data class EraseStroke(val stroke: Stroke) : DrawAction()
+    data class EraseStroke(val stroke: Stroke, val index: Int = -1) : DrawAction()
     data class ClearStrokes(val strokes: List<Stroke>) : DrawAction()
     data class CanvasSnapshot(val before: List<Stroke>, val after: List<Stroke>) : DrawAction()
 

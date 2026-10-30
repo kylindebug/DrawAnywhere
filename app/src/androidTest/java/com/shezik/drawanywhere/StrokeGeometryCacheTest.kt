@@ -23,7 +23,7 @@ class StrokeGeometryCacheTest {
         assertEquals(100f, stroke.geometryBounds.right, 0f)
     }
 
-    @Test fun erasureCopiesHaveFreshPathsAndUndoRestoresOriginalPath() {
+    @Test fun erasureRetainsInkPathAndCachesItsIndependentMask() {
         val controller = DrawController(PenConfig())
         controller.createStroke(Offset.Zero)
         controller.updateLatestStroke(Offset(100f, 0f))
@@ -33,7 +33,13 @@ class StrokeGeometryCacheTest {
         controller.setPenConfig(PenConfig(penType = PenType.PixelEraser, width = 20f))
         controller.createStroke(Offset(50f, 0f)); controller.finishStroke()
         assertEquals(2, controller.strokeList.size)
-        controller.strokeList.forEach { assertNotSame(path, PenRenderer.pathFor(it)) }
+        assertSame(original, controller.strokeList.first())
+        assertSame(path, PenRenderer.pathFor(original))
+        val mask = controller.strokeList.last()
+        assertEquals(PenType.PixelEraser, mask.penType)
+        val maskPath = PenRenderer.pathFor(mask)
+        assertNotSame(path, maskPath)
+        assertSame(maskPath, PenRenderer.pathFor(mask))
         controller.undo()
         assertSame(original, controller.strokeList.single())
         assertSame(path, PenRenderer.pathFor(controller.strokeList.single()))

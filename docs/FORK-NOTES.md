@@ -34,7 +34,11 @@ Android 12+ restricts input through application overlays. In passthrough mode th
 
 Holding either stylus side button (or using an eraser-tip tool) temporarily selects Pixel Eraser. Button changes are checked on move and button events, so release restores the selected drawing tool without requiring pen-up. Each uninterrupted eraser segment is one undoable operation. Width uses the saved Pixel Eraser width.
 
-Pixel Eraser cuts line segments at local intersections and sweeps between event samples, including sparsely sampled ink and fast eraser motion. Rectangle/ellipse outlines become editable ink fragments after the first hit. Unaffected strokes retain their original representation; laser fragments retain their original expiry. Undo restores the original geometry and redo restores the cut fragments.
+Pixel Eraser now paints an ordered transparent path using the same quadratic
+smoothing, round caps, round joins and width as the freehand pen. It clears actual
+coverage inside an isolated ink layer, rather than cutting and re-rendering stroke
+centerlines. Original ink and shape geometry remain unchanged; subsequent ink can
+cover the erased region. Undo removes the latest eraser path and redo restores it.
 
 History retains only the latest operation, as requested. Undo can revert that
 operation once, and redo can restore it; a new edit replaces the previous history.
@@ -160,3 +164,56 @@ synthetic stylus/input tests. The old two-undo stylus assertion was updated for 
 requested one-step semantics, with a separate test retaining eraser undo/redo
 coverage. The toolbar recordings above remain validation of the preceding commit;
 the full activity-based instrumentation suite was not rerun for this change.
+
+## Precise eraser coverage (2026-10-30)
+
+The preceding capsule optimization fixed CPU clipping cost but still clipped stroke
+centerlines using the combined ink/eraser radius. It did not provide a constant-width
+cut through dense, overlapping ink: re-rendered fragments had round caps, and the
+clipping polyline differed from the visible smoothed path. The earlier geometry-only
+tests did not expose this visual defect.
+
+The eraser now records a normal-width path in drawing order. `PixelEraserRenderer`
+uses the same path builder as `PenRenderer`, with Android `PorterDuff.Mode.CLEAR`.
+`InkRenderer` isolates the ink into one layer when eraser paths are present, keeping
+the parent surface intact. The canvas window explicitly enables hardware rendering.
+There is no fragment generation or repeated full-canvas geometry copying. Completed
+paths remain cached; each gesture adds one path. Bounds rejection is conservative:
+an eraser gesture within an ink bounding box can occupy the single undo slot even
+when it crosses an already clear area. Each additional retained path has a rendering
+cost; this implementation does not claim constant memory or rendering time forever.
+
+The stroke eraser skips transparent eraser paths, and undo restores removed ink at
+its original list position so that previous masks still apply. Pen and eraser both
+ignore duplicate coordinates and render a stationary tap as a round dot.
+
+Validation on SM-X910: 113 JVM tests passed; the obsolete centerline-clipping tests
+were replaced by ordered-mask tests and actual rendered-pixel checks. Fifteen
+selected instrumentation tests passed: seven precision tests, one real GPU overlay
+test, two cache tests and five stylus/input tests. Precision coverage includes
+horizontal/vertical/diagonal/curved paths at widths 3, 12 and 48, dense ink with
+different widths/directions, translucent overlaps, rectangle/ellipse outlines,
+zoom factors 0.75 and 2, taps, pixel-exact undo/redo and fresh ink over erased areas.
+Alpha coverage is compared against the same-width pen with a maximum two-level
+8-bit antialiasing tolerance; constant-width interiors are checked independently.
+
+The GPU overlay screenshot test initially used a non-touchable test window. This
+SM-X910 automatically clamped that window's alpha to 0.8, invalidating the test's
+opaque-color assumptions. Using the actual drawing-mode window flags resolved the
+failure. A 12-pixel GPU-rendered cut then passed its interior/edge and parent-surface
+checks. No device-wide opacity or animation setting was changed. These tests use
+synthetic input, not a manual physical S Pen acceptance test.
+
+The final APK also passed the 120-round performance workload (100 original strokes,
+12,800 original points, three software offscreen renders per round). Eraser-command
+processing took 7.863 ms on the first round, a median 0.162 ms, and 0.135 ms on the
+last round. Original ink stayed at 100 strokes/12,800 points; the workload added 120
+two-point eraser paths. These timings exclude drawing. The three software render
+times were 32.36–48.25 ms initially and 69.71–73.33 ms on the last round, reflecting
+the extra layer and retained mask paths; they are not GPU frame or physical pen
+latency measurements. The separate GPU screenshot test validates actual hardware
+coverage but does not establish a frame-rate benchmark. Total selected device
+coverage is 16 tests; build and lint passed with 0 errors and 37 warnings.
+
+References: [Android CLEAR blending](https://developer.android.com/reference/android/graphics/PorterDuff.Mode#CLEAR)
+and [isolated canvas layers](https://developer.android.com/reference/android/graphics/Canvas#saveLayer(android.graphics.RectF,%20android.graphics.Paint)).
