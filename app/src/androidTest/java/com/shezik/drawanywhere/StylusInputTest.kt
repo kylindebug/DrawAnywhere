@@ -36,11 +36,11 @@ class StylusInputTest {
         vm.startStroke(Offset.Zero, StrokeModifier.None)
         vm.updateStroke(Offset(100f, 0f))
         vm.finishStroke()
-        val original = controller.strokeList.toList()
         send(handler, MotionEvent.ACTION_DOWN, 50f, -50f, MotionEvent.BUTTON_STYLUS_PRIMARY)
         send(handler, MotionEvent.ACTION_MOVE, 50f, 50f, MotionEvent.BUTTON_STYLUS_PRIMARY)
         assertEquals(PenType.PixelEraser, vm.uiState.value.currentPenType)
         assertEquals(2, controller.strokeList.size)
+        val cut = controller.strokeList.toList()
         send(handler, MotionEvent.ACTION_BUTTON_RELEASE, 50f, 50f)
         assertEquals(PenType.Pen, vm.uiState.value.currentPenType)
         send(handler, MotionEvent.ACTION_MOVE, 80f, 80f)
@@ -48,10 +48,29 @@ class StylusInputTest {
         assertEquals(3, controller.strokeList.size)
         vm.undo() // resumed ink
         assertEquals(2, controller.strokeList.size)
-        vm.undo() // the entire eraser sweep
+        vm.undo() // Only the latest operation is retained.
+        assertEquals(cut, controller.strokeList)
+        vm.redo()
+        assertEquals(3, controller.strokeList.size)
+    }
+
+    @Test fun sideButtonSweepCanBeUndoneAndRedoneAsOneStep() = onMain {
+        val (controller, vm, handler) = setup()
+        vm.startStroke(Offset.Zero, StrokeModifier.None)
+        vm.updateStroke(Offset(100f, 0f))
+        vm.finishStroke()
+        val original = controller.strokeList.toList()
+        send(handler, MotionEvent.ACTION_DOWN, 50f, -50f, MotionEvent.BUTTON_STYLUS_PRIMARY)
+        send(handler, MotionEvent.ACTION_MOVE, 50f, 50f, MotionEvent.BUTTON_STYLUS_PRIMARY)
+        send(handler, MotionEvent.ACTION_UP, 50f, 50f, MotionEvent.BUTTON_STYLUS_PRIMARY)
+        val cut = controller.strokeList.toList()
+        assertEquals(2, cut.size)
+        vm.undo()
+        assertEquals(original, controller.strokeList)
+        vm.undo()
         assertEquals(original, controller.strokeList)
         vm.redo()
-        assertEquals(2, controller.strokeList.size)
+        assertEquals(cut, controller.strokeList)
     }
 
     @Test fun buttonStateOnMoveSwitchesToolsInBothDirections() = onMain {

@@ -14,14 +14,12 @@ class PixelEraserTool(private val ctx: ToolContext) : StrokeTool {
     override fun onStart(point: Offset) {
         snapshot = null
         previous = point
-        eraseAt(point)
+        erase(EraserSweep(point, point))
     }
 
     override fun onMove(point: Offset) {
         val from = previous ?: point
-        // Sweep between samples, including fast moves that cross a thin stroke.
-        val steps = ceil((point - from).getDistance() / max(1f, ctx.penConfig.width / 4)).toInt().coerceAtLeast(1)
-        for (step in 1..steps) eraseAt(from + (point - from) * (step.toFloat() / steps))
+        if (point != from) erase(EraserSweep(from, point))
         previous = point
     }
 
@@ -32,29 +30,44 @@ class PixelEraserTool(private val ctx: ToolContext) : StrokeTool {
         ctx.pushUndo(DrawAction.CanvasSnapshot(saved, ctx.strokes.toList()))
     }
 
-    private fun eraseAt(point: Offset) {
-        var changed = false
-        for (i in ctx.strokes.indices.reversed()) {
+    private fun erase(sweep: EraserSweep) {
+        var replacement: MutableList<Stroke>? = null
+        for (i in ctx.strokes.indices) {
             val stroke = ctx.strokes[i]
-            if (stroke.penType.isEraser) continue
             val radius = (ctx.penConfig.width + stroke.width) / 2f
-            val segments = clipOutsideCircle(outline(stroke), point, radius) ?: continue
+            val bounds = stroke.geometryBounds
+            val miss = stroke.penType.isEraser || bounds.right < sweep.left - radius ||
+                bounds.left > sweep.right + radius || bounds.bottom < sweep.top - radius ||
+                bounds.top > sweep.bottom + radius
+            val segments = if (miss) null else clipOutsideSweep(outline(stroke), sweep, radius)
+            if (segments == null) {
+                replacement?.add(stroke)
+                continue
+            }
             if (snapshot == null) snapshot = ctx.strokes.toList()
-            ctx.strokes.removeAt(i)
-            for (points in segments.asReversed()) {
-                ctx.strokes.add(i, stroke.copy(
-                    _points = points.toMutableList(),
+            if (replacement == null) {
+                replacement = ArrayList(ctx.strokes.size + segments.size)
+                for (j in 0 until i) replacement.add(ctx.strokes[j])
+            }
+            for (points in segments) {
+                replacement.add(stroke.copy(
+                    _points = points,
                     penType = if (stroke.penType == PenType.Laser) PenType.Laser else PenType.Pen,
                 ))
             }
-            changed = true
         }
-        if (changed) ctx.notifyChanged()
+        replacement?.let {
+            ctx.strokes.clear()
+            ctx.strokes.addAll(it)
+            ctx.notifyChanged()
+        }
     }
 
     private fun outline(stroke: Stroke): List<Offset> {
         val pts = stroke.points
         if (pts.size < 2) return pts
+        if (stroke.penType != PenType.Rectangle && stroke.penType != PenType.Ellipse) return pts
+        stroke.cachedEraserOutline?.let { return it }
         val a = pts[0]; val b = pts[1]
         return when (stroke.penType) {
             PenType.Rectangle -> listOf(a, Offset(b.x, a.y), b, Offset(a.x, b.y), a)
@@ -68,51 +81,6 @@ class PixelEraserTool(private val ctx: ToolContext) : StrokeTool {
                 }
             }
             else -> pts
-        }
+        }.also { stroke.cachedEraserOutline = it }
     }
-}
-
-/** Null means untouched. Intersections split sparse segments, not just sampled points. */
-internal fun clipOutsideCircle(points: List<Offset>, center: Offset, radius: Float): List<List<Offset>>? {
-    val r2 = radius * radius
-    if (points.isEmpty()) return null
-    if (points.size == 1) return if ((points[0] - center).getDistanceSquared() <= r2) emptyList() else null
-    val result = mutableListOf<MutableList<Offset>>()
-    var current: MutableList<Offset>? = null
-    var changed = false
-    fun append(a: Offset, b: Offset) {
-        if (current == null || (current!!.last() - a).getDistanceSquared() > 0.0001f) {
-            current = mutableListOf(a)
-            result.add(current!!)
-        }
-        if ((current!!.last() - b).getDistanceSquared() > 0.0001f) current!!.add(b)
-    }
-    for ((a, b) in points.zipWithNext()) {
-        val d = b - a; val f = a - center
-        val aa = d.getDistanceSquared()
-        if (aa < 0.000001f) {
-            if (f.getDistanceSquared() <= r2) { changed = true; current = null }
-            else append(a, b)
-            continue
-        }
-        val bb = 2f * (f.x * d.x + f.y * d.y)
-        val cc = f.getDistanceSquared() - r2
-        val discriminant = bb * bb - 4f * aa * cc
-        val cuts = mutableListOf(0f, 1f)
-        if (discriminant > 0f) {
-            val root = sqrt(discriminant)
-            for (t in listOf((-bb - root) / (2f * aa), (-bb + root) / (2f * aa))) {
-                if (t > 0f && t < 1f) cuts.add(t)
-            }
-        }
-        cuts.sort()
-        for ((start, end) in cuts.zipWithNext()) {
-            val mid = a + d * ((start + end) / 2f)
-            if ((mid - center).getDistanceSquared() < r2) {
-                changed = true
-                current = null
-            } else append(a + d * start, a + d * end)
-        }
-    }
-    return if (changed) result else null
 }

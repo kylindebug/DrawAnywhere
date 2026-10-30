@@ -131,7 +131,8 @@ class DrawControllerTest {
             c.updateLatestStroke(Offset(it.toFloat() + 1f, 1f))
             c.finishStroke()
         }
-        repeat(50) { c.undo() }
+        c.undo()
+        assertEquals(59, c.strokeList.size)
         assertFalse(c.canUndo.first())
         assertTrue(c.canRedo.first())
     }
@@ -296,7 +297,7 @@ class DrawControllerTest {
     }
 
     @Test
-    fun multipleRedoPreservesStack() = runTest {
+    fun undoAndRedoAreLimitedToTheLatestStep() = runTest {
         val c = newController()
         // Create 3 strokes
         repeat(3) {
@@ -305,16 +306,20 @@ class DrawControllerTest {
             c.finishStroke()
         }
 
-        // Undo all three
+        // Only the latest stroke can be undone, even after repeated clicks.
         repeat(3) { c.undo() }
+        assertEquals(2, c.strokeList.size)
         assertFalse(c.canUndo.first())
         assertTrue(c.canRedo.first())
 
-        // Redo two — should still have one left on redo stack
+        // Only that one edit can be redone.
         repeat(2) { c.redo() }
-        assertTrue(c.canRedo.first())  // third redo still possible
+        assertEquals(3, c.strokeList.size)
+        assertFalse(c.canRedo.first())
 
-        // New action after partial redo clears remaining redo
+        c.undo()
+        assertTrue(c.canRedo.first())
+        // A new edit replaces the old one-step history.
         c.createStroke(Offset(100f, 100f))
         c.finishStroke()
         assertFalse(c.canRedo.first())  // redo cleared by new action

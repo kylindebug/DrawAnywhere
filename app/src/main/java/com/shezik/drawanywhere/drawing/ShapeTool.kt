@@ -21,7 +21,7 @@ class ShapeTool(private val ctx: ToolContext) : StrokeTool {
     }
 
     override fun onMove(point: Offset) {
-        ctx.strokes.lastOrNull()?.let { it._points[1] = point }
+        ctx.strokes.lastOrNull()?.let { it._points[1] = point; it.invalidateGeometry() }
     }
 
     override fun onFinish() {
@@ -35,6 +35,7 @@ class ShapeTool(private val ctx: ToolContext) : StrokeTool {
         }
         stroke._points[0] = Offset(left, top)
         stroke._points[1] = Offset(right, bottom)
+        stroke.invalidateGeometry()
         ctx.pushUndo(DrawAction.AddStroke(stroke))
         ctx.notifyChanged()
     }

@@ -36,6 +36,9 @@ Holding either stylus side button (or using an eraser-tip tool) temporarily sele
 
 Pixel Eraser cuts line segments at local intersections and sweeps between event samples, including sparsely sampled ink and fast eraser motion. Rectangle/ellipse outlines become editable ink fragments after the first hit. Unaffected strokes retain their original representation; laser fragments retain their original expiry. Undo restores the original geometry and redo restores the cut fragments.
 
+History retains only the latest operation, as requested. Undo can revert that
+operation once, and redo can restore it; a new edit replaces the previous history.
+
 ## Validation on a Samsung device
 
 - Finger drawing on: finger ink and S Pen ink; side-button press/release while touching.
@@ -127,3 +130,33 @@ APK additionally passed nine-region grid checks for both toolbar orientations on
 the portrait tablet (18 placements, 54 open/close cycles). No new instrumentation
 suite result is claimed for this revision; its validation uses the 113 unit tests,
 physical grid checks, and the two complete transition recordings above.
+
+## Pixel eraser performance and one-step history (2026-10-30)
+
+The old eraser resampled each move into many circles, repeatedly scanned and copied
+ink, and published hundreds of changes for a long move. It now clips once against
+the exact swept disk (a capsule), skips strokes outside cached bounds, and allocates
+replacement fragments only on a hit. Each changed input sample publishes once.
+Sub-millipixel boundary residue is ignored to prevent repeated cuts from multiplying
+fragments. Unchanged render paths and shape outlines are cached; point edits
+invalidate those caches. Undo/redo history defaults to one operation.
+
+On the same SM-X910, a synthetic workload of 100 strokes with 128 points each and
+long diagonal eraser sweeps measured 10,982–11,498 ms per sweep on the preceding
+build (three rounds before the 30-second workload limit). The optimized build
+completed all 12 rounds: the first three sweeps took 65.75, 27.92 and 14.77 ms;
+the next three new sweeps took 8.39–13.30 ms. Six repeated sweeps over those cleared
+regions took 4.44–5.37 ms, created no additional fragments, and published no changes.
+The first three rounds' cumulative ART allocations, including three offscreen
+renders per round, fell from roughly 1.78–1.79 GB to 0.33–0.49 MB. This measures
+allocation traffic, not resident memory. These are cold-start debug-build CPU
+geometry/offscreen-render measurements, not physical pen-to-display latency.
+
+Validation: 121 JVM tests passed, including seeded geometry comparisons, end caps,
+tangencies, long sparse segments, idempotent repeated erasure, and one-step history.
+Build and lint passed (0 errors, 37 warnings). Eight selected instrumentation tests
+passed on SM-X910: one performance workload, two geometry-cache tests, and five
+synthetic stylus/input tests. The old two-undo stylus assertion was updated for the
+requested one-step semantics, with a separate test retaining eraser undo/redo
+coverage. The toolbar recordings above remain validation of the preceding commit;
+the full activity-based instrumentation suite was not rerun for this change.

@@ -2,7 +2,9 @@ package com.shezik.drawanywhere.model
 
 import android.graphics.Canvas
 import android.graphics.Paint
+import android.graphics.Path
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 
@@ -20,6 +22,30 @@ data class Stroke(
     var modifiedAt: Long = createdAt,
 ) {
     val points: List<Offset> get() = _points
+
+    internal var cachedPath: Path? = null
+    internal var cachedEraserOutline: List<Offset>? = null
+    private var cachedBounds: Rect? = null
+
+    internal fun invalidateGeometry() {
+        cachedPath = null
+        cachedEraserOutline = null
+        cachedBounds = null
+    }
+
+    internal val geometryBounds: Rect
+        get() {
+            cachedBounds?.let { return it }
+            if (_points.isEmpty()) return Rect.Zero
+            var left = _points[0].x; var right = left
+            var top = _points[0].y; var bottom = top
+            for (i in 1 until _points.size) {
+                val p = _points[i]
+                left = minOf(left, p.x); right = maxOf(right, p.x)
+                top = minOf(top, p.y); bottom = maxOf(bottom, p.y)
+            }
+            return Rect(left, top, right, bottom).also { cachedBounds = it }
+        }
 
     fun render(canvas: Canvas, paint: Paint) {
         if (_points.isEmpty()) return
