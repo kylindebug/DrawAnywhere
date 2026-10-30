@@ -14,7 +14,7 @@ This branch changes the toolbar and pen input while retaining the upstream AGPL-
 
 ## Finger passthrough with S Pen source routing (device-dependent)
 
-**Strict simultaneous operation is not yet validated on Samsung hardware. On the Android 17 emulator, starting a separate virtual touchscreen while a virtual pen stroke was down caused the Android input layer to send `ACTION_CANCEL` to the pen. This branch therefore does not satisfy strict uninterrupted simultaneous operation on that tested system.** Source routing works for separate finger/pen gestures; it cannot reconstruct motion discarded by Android. Device model, Android/One UI version and available system privileges are needed to determine an appropriate backend for affected devices.
+**Strict simultaneous operation remains unresolved. On the Android 17 emulator, starting a separate virtual touchscreen while a virtual pen stroke was down caused the Android input layer to send `ACTION_CANCEL` to the pen. A physical SM-X910 on Android 16 also reported no overlapping pen/finger contacts during a user-performed raw-input test (details below).** Source routing works for separate finger/pen gestures; it cannot reconstruct motion discarded before it reaches the application. An ADB helper alone is not a demonstrated solution for this device.
 
 Requires Android 14 (API 34) or newer:
 
@@ -56,3 +56,12 @@ Build: use JDK 21 (JetBrains, as pinned by upstream), Android SDK 37, and the in
 - Visual checks confirmed the requested toolbar order and merged pen controls/line preview on a tablet-size display.
 - A virtual hardware pen created with Android `uinput` reached the accessibility service and drew ink while Finger drawing was off. Ordinary `adb shell input stylus` injection bypasses that filter and is not evidence for this route.
 - Overlapping independent `uinput` pen and finger streams produced a pen cancellation on Android 17. This is an unresolved limitation of requirement 2, not a passing simultaneous-input test.
+
+## Physical input diagnostic (2026-10-30)
+
+- Device: Samsung SM-X910, Android 16 / API 36 (36.1), `ro.build.version.oneui=80500`, security patch 2026-08-05. Production build, locked verified boot; no `su` found in the common checked locations.
+- Separate evdev nodes: `sec_e-pen` and `sec_touchscreen`. ADB shell could read both and successfully acquire/release `EVIOCGRAB` on the pen. Only the pen was grabbed; the touchscreen remained available to Android.
+- During a 60-second test the user was asked to move S Pen while sliding another finger, in both contact orders, and confirmed completing the test. A probe counted `SYN_REPORT` frames with `BTN_TOUCH` active without storing coordinates: **1,602 pen-contact frames, 329 finger-contact frames, zero overlapping contact frames on either stream**.
+- This indicates suppression before the app-level input route in this test. It does not identify the exact firmware/driver component, establish behavior for every Samsung device, or prove that rooting would fix it. No applicable switch was identified in the inspected settings and exposed driver command lists.
+- The probe released the pen and was removed. No system settings, original app installation, or app data were changed. This was a hardware input diagnostic, not an installation or end-to-end validation of this APK on Samsung hardware.
+- The final application commit `0985eab` also passed [GitHub Actions build and API 35 instrumentation](https://github.com/kylindebug/DrawAnywhere/actions/runs/40994348377).
