@@ -41,4 +41,11 @@
     <string name="unlock_all">解锁全部</string>
     <string name="copyright">© 2025–2026 shezik, 采用 AGPLv3 协议或其更高版本授权。</string>
     <string name="licenses">应用图标来自 Solar Icons, 采用 CC BY 4.0 协议授权。</string>
+    <string name="hide_toolbar_items">隐藏工具栏其他项目</string>
+    <string name="show_toolbar_items">显示工具栏其他项目</string>
+    <string name="stylus_service_name">DrawAnywhere S Pen 输入</string>
+    <string name="stylus_service_description">如需 S Pen 书写时手指仍能操作其他应用，请在无障碍设置中启用“DrawAnywhere S Pen 输入”（Android 14 及以上），然后关闭“手指绘画”。此服务仅在画布工作时接收笔输入，不读取屏幕内容。未启用服务时，关闭手指绘画会让所有输入穿透。</string>
+    <string name="stylus_requires_android14">S Pen 书写与手指穿透同时工作需要 Android 14 或更新版本。此设备关闭手指绘画后，所有输入均穿透。</string>
+    <string name="stylus_service_ready">S Pen 输入已就绪。关闭“手指绘画”，即可用手指操作底层应用，同时用 S Pen 书写。手掌按钮仍可将全部输入切换到底层应用。</string>
+    <string name="enable_stylus_service">启用 S Pen 输入</string>
 </resources>

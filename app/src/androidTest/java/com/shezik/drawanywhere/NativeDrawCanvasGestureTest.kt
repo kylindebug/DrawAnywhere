@@ -54,7 +54,7 @@ class NativeDrawCanvasGestureTest {
             stopService = {}
         )
         assertEquals(
-            PenType.StrokeEraser,
+            PenType.PixelEraser,
             vm.resolvePenType(com.shezik.drawanywhere.model.StrokeModifier.PrimaryButton)
         )
         assertEquals(

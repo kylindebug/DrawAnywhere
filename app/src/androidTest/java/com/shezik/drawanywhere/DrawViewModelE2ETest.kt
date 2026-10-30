@@ -66,7 +66,7 @@ class DrawViewModelE2ETest {
         val vm = createViewModel(currentPenType = PenType.Pen)
 
         vm.startStroke(Offset(10f, 10f), StrokeModifier.PrimaryButton)
-        assertEquals(PenType.StrokeEraser, vm.uiState.first().currentPenType)
+        assertEquals(PenType.PixelEraser, vm.uiState.first().currentPenType)
 
         vm.finishStroke()
         assertEquals(PenType.Pen, vm.uiState.first().currentPenType)

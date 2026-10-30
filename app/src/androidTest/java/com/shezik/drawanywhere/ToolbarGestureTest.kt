@@ -3,6 +3,8 @@ package com.shezik.drawanywhere
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.geometry.Offset
 import androidx.test.platform.app.InstrumentationRegistry
 import com.shezik.drawanywhere.model.PenConfig
 import com.shezik.drawanywhere.view.toolbar.DrawToolbar
@@ -19,6 +21,27 @@ class ToolbarGestureTest {
     val composeRule = createComposeRule()
 
     private val appContext get() = InstrumentationRegistry.getInstrumentation().targetContext
+
+    @Test
+    fun hiddenEyeCanBeLongPressedAndDraggedWithoutChangingCanvas() {
+        val controller = DrawController(PenConfig())
+        val vm = DrawViewModel(controller, PreferencesManager(appContext),
+            UiState(firstDrawerOpen = false), ServiceState(), {})
+        composeRule.setContent { DrawToolbar(viewModel = vm) }
+        val initial = vm.serviceState.value.toolbarPosition
+        composeRule.onNodeWithContentDescription(appContext.getString(R.string.show_toolbar_items))
+            .performTouchInput {
+                down(center)
+                advanceEventTime(700)
+                moveBy(Offset(60f, 40f))
+                up()
+            }
+        composeRule.runOnIdle {
+            assertTrue(vm.serviceState.value.toolbarPosition.x > initial.x)
+            assertTrue(vm.uiState.value.canvasVisible)
+            assertTrue(!vm.uiState.value.firstDrawerOpen)
+        }
+    }
 
     @Test
     fun longPressDragRepositionsToolbar() {

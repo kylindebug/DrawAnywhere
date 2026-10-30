@@ -4,6 +4,8 @@ import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
@@ -17,6 +19,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalView
+import com.shezik.drawanywhere.input.StylusInputBridge
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
@@ -131,17 +136,24 @@ internal fun PopupToolbarButton(
                 onDismissRequest = { isPopupOpen = false },
                 properties = PopupProperties(focusable = true)
             ) {
+                val popupView = LocalView.current
+                DisposableEffect(popupView) {
+                    StylusInputBridge.registerPopup(popupView) { isPopupOpen = false }
+                    onDispose { StylusInputBridge.unregisterPopup(popupView) }
+                }
                 Card(
-                    modifier = Modifier.wrapContentSize().width(200.dp),
+                    modifier = Modifier.width(280.dp)
+                        .heightIn(max = (LocalConfiguration.current.screenHeightDp - 32).coerceAtLeast(120).dp),
                     elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
                     shape = RoundedCornerShape(Spacing.lg),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)
                 ) {
                     Column(
-                        modifier = Modifier.fillMaxWidth().padding(Spacing.lg),
+                        modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(Spacing.lg),
                         verticalArrangement = Arrangement.spacedBy(Spacing.sm)
                     ) {
-                        HorizontalPager(
+                        if (button.popupPages.size == 1) button.popupPages.first().invoke()
+                        else HorizontalPager(
                             state = pagerState,
                             modifier = Modifier.animateContentSize(),
                             verticalAlignment = Alignment.Top

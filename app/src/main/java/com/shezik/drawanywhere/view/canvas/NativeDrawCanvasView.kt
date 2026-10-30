@@ -72,6 +72,8 @@ class NativeDrawCanvasView(
     override fun onTouchEvent(event: MotionEvent): Boolean =
         touchHandler.handleEvent(event)
 
+    fun cancelInput() = touchHandler.cancelInput()
+
     // ── Hover (stylus/mouse size preview) ──────────────────────
 
     override fun onHoverEvent(event: MotionEvent): Boolean =

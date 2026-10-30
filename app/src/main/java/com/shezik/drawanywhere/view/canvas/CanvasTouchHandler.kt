@@ -81,6 +81,7 @@ class CanvasTouchHandler(
     private val TAG = "DrawTouch"
 
     private var activePointerId: Int = -1
+    private var activePointerIsStylus = false
     // strokePending XOR strokeInProgress: pending during finger debounce (50ms),
     // progress once committed. Both false when idle or in multi-touch.
     private var strokeInProgress: Boolean = false
@@ -158,6 +159,10 @@ class CanvasTouchHandler(
         private set
 
     fun handleEvent(event: MotionEvent): Boolean {
+        // Ignore fingers in stylus-only mode. Cross-app passthrough is handled by
+        // the accessibility source subscription + non-touchable canvas window.
+        if (!fingerDrawingEnabled() && event.actionMasked != MotionEvent.ACTION_CANCEL &&
+            (0 until event.pointerCount).none { isStylus(event, it) }) return false
         // Track pointer position for size preview
         when (event.actionMasked) {
             MotionEvent.ACTION_MOVE -> {
@@ -268,7 +273,8 @@ class CanvasTouchHandler(
     // ═══════════════════════════════════════════════════════════════
 
     private fun shouldEnterMultiTouch(event: MotionEvent): Boolean =
-        event.actionMasked == MotionEvent.ACTION_POINTER_DOWN && event.pointerCount >= 2
+        fingerDrawingEnabled() && event.actionMasked == MotionEvent.ACTION_POINTER_DOWN &&
+            event.pointerCount >= 2 && (0 until event.pointerCount).none { isStylus(event, it) }
 
     private fun enterMultiTouch(event: MotionEvent) {
         Log.d(TAG, "  → multi-touch entered (${event.pointerCount} pointers)")
@@ -301,22 +307,32 @@ class CanvasTouchHandler(
         val vp = viewModel.viewport.value
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN              -> onPointerDown(event, vp)
+            MotionEvent.ACTION_POINTER_DOWN -> {
+                if (isStylus(event, event.actionIndex)) {
+                    cancelInput()
+                    onPointerDown(event, vp, event.actionIndex)
+                }
+            }
             MotionEvent.ACTION_MOVE              -> onPointerMove(event, vp)
+            MotionEvent.ACTION_BUTTON_PRESS,
+            MotionEvent.ACTION_BUTTON_RELEASE -> updateStylusModifier(event, vp)
+            MotionEvent.ACTION_POINTER_UP -> {
+                if (event.getPointerId(event.actionIndex) == activePointerId) onPointerUp(event)
+            }
             MotionEvent.ACTION_UP,
             MotionEvent.ACTION_CANCEL            -> onPointerUp(event)
         }
     }
 
-    private fun onPointerDown(event: MotionEvent, vp: CanvasViewport) {
+    private fun onPointerDown(event: MotionEvent, vp: CanvasViewport, index: Int = 0) {
         tapDetector.cancelPending()
 
-        activePointerId = event.getPointerId(0)
-        val isStylus = event.getToolType(0).let {
-            it == MotionEvent.TOOL_TYPE_STYLUS || it == MotionEvent.TOOL_TYPE_ERASER
-        }
+        activePointerId = event.getPointerId(index)
+        val isStylus = isStylus(event, index)
+        activePointerIsStylus = isStylus
         downTimeMs = event.eventTime
-        pendingModifier = detectStrokeModifier(event)
-        val worldPt = vp.screenToWorld(Offset(event.x, event.y))
+        pendingModifier = detectStrokeModifier(event, index)
+        val worldPt = vp.screenToWorld(Offset(event.getX(index), event.getY(index)))
 
         if (isStylus) {
             Log.d(TAG, "  → stylus DOWN: stroke started (ptr=#$activePointerId, mod=$pendingModifier)")
@@ -336,6 +352,10 @@ class CanvasTouchHandler(
     }
 
     private fun onPointerMove(event: MotionEvent, vp: CanvasViewport) {
+        if (updateStylusModifier(event, vp)) {
+            onInvalidate()
+            return // Historical samples predate the button transition.
+        }
         if (strokePending) {
             accumulatePendingPoints(event, vp)
             if (event.eventTime - downTimeMs < fingerDebounceMs) return
@@ -345,6 +365,30 @@ class CanvasTouchHandler(
         }
         if (!strokeInProgress) return
         appendPointsToStroke(event, vp)
+        onInvalidate()
+    }
+
+    private fun updateStylusModifier(event: MotionEvent, vp: CanvasViewport): Boolean {
+        if (!strokeInProgress || !activePointerIsStylus) return false
+        val index = event.findPointerIndex(activePointerId)
+        if (index < 0) return false
+        val modifier = detectStrokeModifier(event, index)
+        if (modifier == pendingModifier) return false
+        viewModel.finishStroke()
+        pendingModifier = modifier
+        viewModel.startStroke(vp.screenToWorld(Offset(event.getX(index), event.getY(index))), modifier)
+        onInvalidate()
+        return true
+    }
+
+    fun cancelInput() {
+        cancelAnyStroke()
+        discardPendingStroke()
+        tapDetector.cancelPending()
+        isMultiTouch = false
+        activePointerId = -1
+        activePointerIsStylus = false
+        hoverState = null
         onInvalidate()
     }
 
@@ -450,6 +494,7 @@ class CanvasTouchHandler(
     // ═══════════════════════════════════════════════════════════════
 
     private fun detectStrokeModifier(event: MotionEvent, pointerIndex: Int = 0): StrokeModifier {
+        if (event.getToolType(pointerIndex) == MotionEvent.TOOL_TYPE_ERASER) return StrokeModifier.PrimaryButton
         if (event.getToolType(pointerIndex) != MotionEvent.TOOL_TYPE_STYLUS) return StrokeModifier.None
         val b = event.buttonState
         val primary = (b and MotionEvent.BUTTON_STYLUS_PRIMARY) != 0
@@ -461,4 +506,8 @@ class CanvasTouchHandler(
             else -> StrokeModifier.None
         }
     }
+
+    private fun isStylus(event: MotionEvent, index: Int) =
+        event.getToolType(index) == MotionEvent.TOOL_TYPE_STYLUS ||
+            event.getToolType(index) == MotionEvent.TOOL_TYPE_ERASER
 }

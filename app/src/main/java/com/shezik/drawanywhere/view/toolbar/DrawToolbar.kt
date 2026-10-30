@@ -37,7 +37,6 @@ fun DrawToolbar(
     val canUndo by viewModel.canUndo.collectAsState()
     val canRedo by viewModel.canRedo.collectAsState()
     val canClearCanvas by viewModel.canClearCanvas.collectAsState()
-    val lockMode by viewModel.lockMode.collectAsState()
 
     val haptics = LocalHapticFeedback.current
     val hScrollState = rememberScrollState()
@@ -48,7 +47,7 @@ fun DrawToolbar(
         canUndo = canUndo,
         canRedo = canRedo,
         canClearCanvas = canClearCanvas,
-        onCanvasVisibilityToggle = viewModel::toggleCanvasVisibility,
+        onCanvasVisibilityToggle = viewModel::toggleFirstDrawer,
         onCanvasPassthroughToggle = viewModel::toggleCanvasPassthrough,
         onClearCanvas = viewModel::clearCanvas,
         onUndo = viewModel::undo,
@@ -63,8 +62,6 @@ fun DrawToolbar(
         onChangeVisibleOnStart = viewModel::setVisibleOnStart,
         fingerDrawingEnabled = uiState.fingerDrawingEnabled,
         onChangeFingerDrawingEnabled = viewModel::setFingerDrawingEnabled,
-        onCycleLockMode = viewModel::cycleLockMode,
-        lockMode = lockMode,
         onQuitApplication = viewModel::quitApplication
     ).associateBy { it.id }
 
@@ -92,7 +89,7 @@ fun DrawToolbar(
                     modifier = Modifier.padding(Spacing.sm),
                     uiState = uiState,
                     allButtonsMap = allButtonsMap,
-                    onExpandToggleClick = viewModel::toggleSecondDrawer
+                    onExpandToggleClick = viewModel::toggleToolbarCollapsed
                 )
             }
         }
@@ -107,7 +104,7 @@ internal fun ToolbarButtonsContainer(
     onExpandToggleClick: () -> Unit
 ) {
     val orientation = uiState.toolbarOrientation
-    val isFirstDrawerOpen = uiState.firstDrawerOpen
+    val isFirstDrawerOpen = uiState.firstDrawerOpen && !uiState.toolbarCollapsed
     val isSecondDrawerOpen = uiState.secondDrawerOpen
     val firstDrawerButtonIds = uiState.firstDrawerButtons
     val secondDrawerButtonIds = uiState.secondDrawerButtons
@@ -126,7 +123,7 @@ internal fun ToolbarButtonsContainer(
     )
     val isDividerVisible = isFirstDrawerOpen &&
         (secondDrawerPinnedButtons.isNotEmpty() || (isSecondDrawerOpen && secondDrawerButtonIds.isNotEmpty()))
-    val isExpandButtonVisible = isFirstDrawerOpen && secondDrawerButtonIds.isNotEmpty()
+    val isExpandButtonVisible = uiState.firstDrawerOpen || uiState.toolbarCollapsed
 
     val isHorizontal = orientation == ToolbarOrientation.HORIZONTAL
 
@@ -161,7 +158,7 @@ internal fun ToolbarButtonsContainer(
         AnimatedVisibility(isExpandButtonVisible,
             enter = fadeIn(tween(300)) + scaleIn(tween(300), initialScale = 0.5f),
             exit = fadeOut(tween(300)) + scaleOut(tween(300), targetScale = 0.5f)
-        ) { ToolbarExpandButton(Modifier, isSecondDrawerOpen, onExpandToggleClick, orientation) }
+        ) { ToolbarExpandButton(Modifier, !uiState.toolbarCollapsed, onExpandToggleClick, orientation) }
     }
 
     if (isHorizontal) {

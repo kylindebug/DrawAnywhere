@@ -77,31 +77,10 @@ fun ColorPicker(
     onPresetSelected: (Color) -> Unit = onColorSelected,
     recentColors: List<Color> = emptyList(),
 ) {
-    val pagerState = rememberPagerState(initialPage = 0) { 2 }
-
     Column(verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
-        HorizontalPager(state = pagerState, verticalAlignment = Alignment.Top) { page ->
-            when (page) {
-                0 -> PresetsPage(selectedColor, onPresetSelected, onColorSelected, recentColors)
-                1 -> HsvPage(selectedColor, onColorSelected)
-            }
-        }
-        // Page dots
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
-            repeat(pagerState.pageCount) { idx ->
-                val selected = pagerState.currentPage == idx
-                Box(
-                    modifier = Modifier
-                        .size(if (selected) 10.dp else 6.dp)
-                        .padding(2.dp)
-                        .background(
-                            if (selected) MaterialTheme.colorScheme.onSurface
-                            else MaterialTheme.colorScheme.onSurfaceVariant,
-                            CircleShape
-                        )
-                )
-            }
-        }
+        PresetsPage(selectedColor, onPresetSelected, onColorSelected, recentColors)
+        HorizontalDivider()
+        HsvPage(selectedColor, onColorSelected)
     }
 }
 
