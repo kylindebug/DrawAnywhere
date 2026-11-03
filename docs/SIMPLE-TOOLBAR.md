@@ -51,3 +51,26 @@ undo/redo restoration, and discarded tiny shapes. Build/lint passed (0 errors,
 38 warnings). Original preferences were restored and the installed APK hash
 verified. These are synthetic input checks; they do not change Samsung's hardware
 palm-rejection behavior.
+
+## Samsung background-freeze ANR (2026-11-03)
+
+SM-X910 recorded a 10-second input-dispatch ANR at 11:03:56. The system log
+shows Samsung Freecess freezing the foreground-service process at 11:02:31.929
+(`Bg-buff`) and releasing it only at 11:03:56.471 (`Signal`, during ANR capture).
+The trace contains `do_freezer_trap` for its threads. AppOps reported
+`RUN_ANY_IN_BACKGROUND: ignore`; Samsung MARs reported `FAS Y`.
+
+Device remediation was limited to DrawAnywhere: allow `RUN_ANY_IN_BACKGROUND`
+and add the package to the device-idle exemption list. Readback confirmed
+`allow`, the package exemption, and MARs `FAS N`. No APK change was needed.
+On another Samsung device, check the app's battery/background restrictions
+when an otherwise-visible toolbar stops responding. Samsung documents its
+[background application management](https://developer.samsung.com/mobile/app-management.html).
+An APK reinstall alone does not establish that device restrictions are cleared.
+
+After the user approved clearing the temporary ink, the app was restarted to
+remove the recurring old ANR dialog. The same APK then passed 90 seconds idle,
+five ADB stylus-draw/clear-button cycles (screenshot comparisons), and toolbar
+drag/restore. No newer ANR or ANR dialog was found. The toolbar was returned to
+its original left edge. This verifies the device remedy with synthetic input;
+it is not a new manual S Pen hardware acceptance test.
