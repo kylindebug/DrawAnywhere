@@ -145,3 +145,30 @@ restart, three 30-second Freecess checks found no frozen entry; five actual ADB
 stylus draw/clear cycles passed screenshot comparisons, with no new ANR. This is
 a verified device-policy refresh, not a claim that the APK can override Samsung
 freezing or that a finite idle check guarantees it will never recur.
+
+## Physical palm validation correction (2026-11-03, 15:12–15:22)
+
+The synthetic held-palm tests above do **not** establish physical palm support.
+The user reproduced both failures on SM-X910. Temporary native/Compose event
+probes, raw touchscreen/S Pen event capture and InputDispatcher snapshots gave
+the following results while the app remained responsive:
+
+- At the left edge, finger taps reached the native toolbar as `ACTION_CANCEL`
+  (`flags=32`) followed by UP, without a valid DOWN. They were canceled before
+  Compose/button handling. Lifting the palm restored normal DOWN/UP and callbacks.
+- S Pen attempts at the left-edge toolbar produced hover events but no raw
+  `BTN_TOUCH` press in that capture. This establishes the missing press, not
+  whether edge rejection, pen sensing, or another device condition caused it.
+- Moving the toolbar from x=0 to x=600 physical pixels allowed the user to switch
+  modes and clear with S Pen while retaining the palm. Native DOWN/UP and MODE /
+  CLEAR callbacks were recorded at 15:21:45, 15:21:47 and 15:21:50. The user
+  confirmed S Pen success and continued finger failure at the interior position.
+
+Thus S Pen toolbar operation with a held palm is physically verified away from
+the edge. Concurrent finger toolbar operation is **not reliably supported** on
+this device by the current implementation. The traces do not prove that every
+possible OS/device-specific approach is impossible. No canceled events are
+converted into clicks, and no hardware/system input behavior is overridden.
+Temporary probes were removed after capture. The toolbar is left at the verified
+interior location for use with S Pen; no automatic inset distance is claimed or
+introduced, since a minimum reliable edge distance has not been measured.
