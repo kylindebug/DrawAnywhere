@@ -33,6 +33,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
@@ -115,6 +117,11 @@ class DrawViewModel(
     init {
 
         _uiState
+            // Mode/drawer changes are transient and are not stored by PreferencesManager.
+            .map { it.copy(canvasVisible = true, canvasPassthrough = false,
+                firstDrawerOpen = true, secondDrawerOpen = false, toolbarCollapsed = false,
+                secondDrawerPinnedButtons = emptySet()) }
+            .distinctUntilChanged()
             .debounce(300)
             .onEach { state -> preferencesManager.saveUiState(state) }
             .launchIn(viewModelScope)
@@ -199,6 +206,11 @@ class DrawViewModel(
         setCanvasPassthrough(!uiState.value.canvasPassthrough)
 
     fun setCanvasPassthrough(passthrough: Boolean) {
+        if (passthrough == uiState.value.canvasPassthrough) return
+        // Finish immediately, before the asynchronous window flag update. This
+        // prevents a retained palm/old pen stream from reviving a stroke on re-enable.
+        finishStroke()
+        inputGeneration++
         val newPinned = getPinSecondDrawerButtonResult("passthrough", passthrough)
         _uiState.update { it.copy(canvasPassthrough = passthrough, secondDrawerPinnedButtons = newPinned) }
     }

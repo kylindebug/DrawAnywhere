@@ -4,7 +4,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Redo
 import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.filled.*
-import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.foundation.layout.Column
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
@@ -33,7 +32,6 @@ internal fun createAllToolbarButtons(
     uiState: UiState,
     canUndo: Boolean,
     canRedo: Boolean,
-    canClearCanvas: Boolean,
     onCanvasVisibilityToggle: () -> Unit,
     onCanvasPassthroughToggle: () -> Unit,
     onClearCanvas: () -> Unit,
@@ -66,9 +64,10 @@ internal fun createAllToolbarButtons(
     ),
     ToolbarButton(
         id = "clear",
-        icon = if (canClearCanvas) Icons.Filled.Delete else Icons.Outlined.Delete,
+        icon = Icons.Filled.Delete,
         contentDescription = stringResource(R.string.clear_canvas),
-        isEnabled = canClearCanvas,
+        // Clearing an empty canvas is cheap. Never discard a tap because the
+        // collected ink state has not caught up with a new stroke yet.
         onClick = onClearCanvas
     ),
     ToolbarButton(

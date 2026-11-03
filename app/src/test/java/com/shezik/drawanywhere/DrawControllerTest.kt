@@ -11,6 +11,23 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class DrawControllerTest {
+    @Test fun repeatedClearUndoAndNewInkKeepSnapshotsIndependent() {
+        val c = DrawController(PenConfig())
+        repeat(30) { n ->
+            c.createStroke(Offset(n.toFloat(), 0f)); c.finishStroke()
+            val before = c.strokeList.toList()
+            c.clearStrokes()
+            c.undo()
+            assertEquals(before, c.strokeList)
+            c.redo()
+            assertTrue(c.strokeList.isEmpty())
+        }
+        c.createStroke(Offset.Zero); c.finishStroke()
+        c.setPenConfig(PenConfig(penType = PenType.Laser))
+        c.createStroke(Offset(100f, 100f)); c.finishStroke()
+        c.clearStrokes(); c.undo()
+        assertEquals(PenType.Pen, c.strokeList.single().penType)
+    }
     @Test fun discardedTinyShapeDoesNotLeaveClearEnabled() {
         val c = DrawController(PenConfig(penType = com.shezik.drawanywhere.model.PenType.Rectangle))
         c.createStroke(Offset.Zero)

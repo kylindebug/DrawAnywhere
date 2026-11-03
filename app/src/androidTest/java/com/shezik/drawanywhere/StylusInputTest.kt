@@ -10,6 +10,20 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class StylusInputTest {
+    @Test fun modeChangesEndOldPenStreamBeforeWindowFlagsAreApplied() = onMain {
+        val (c, vm, handler) = setup()
+        send(handler, MotionEvent.ACTION_DOWN, 10f, 10f)
+        send(handler, MotionEvent.ACTION_MOVE, 20f, 20f)
+        vm.setCanvasPassthrough(true)
+        send(handler, MotionEvent.ACTION_MOVE, 30f, 30f)
+        vm.setCanvasPassthrough(false)
+        send(handler, MotionEvent.ACTION_MOVE, 40f, 40f)
+        send(handler, MotionEvent.ACTION_UP, 40f, 40f)
+        assertEquals(listOf(Offset(10f,10f), Offset(20f,20f)), c.strokeList.single().points)
+        send(handler, MotionEvent.ACTION_DOWN, 50f, 50f)
+        send(handler, MotionEvent.ACTION_UP, 50f, 50f)
+        assertEquals(2, c.strokeList.size)
+    }
     @Test fun hoveringButtonUpdatesPreviewWithoutStartingStroke() = onMain {
         val (c, vm, handler) = setup()
         send(handler, MotionEvent.ACTION_HOVER_ENTER, 100f, 100f)

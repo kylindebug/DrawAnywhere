@@ -80,8 +80,10 @@ sealed class DrawAction {
         is AddStroke -> if (stroke.penType.isEphemeral) null else this
         is EraseStroke -> if (stroke.penType.isEphemeral) null else this
         is ClearStrokes -> {
-            val f = strokes.filter { !it.penType.isEphemeral }
-            if (f.isEmpty()) null else copy(strokes = f)
+            if (strokes.isEmpty()) null else if (strokes.none { it.penType.isEphemeral }) this else {
+                val f = strokes.filter { !it.penType.isEphemeral }
+                if (f.isEmpty()) null else copy(strokes = f)
+            }
         }
         is CanvasSnapshot -> {
             val b = before.filter { !it.penType.isEphemeral }

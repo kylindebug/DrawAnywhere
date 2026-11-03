@@ -110,3 +110,38 @@ checks. Running offscreen checks before the Activity tests completed all 25 in
 APK removed. Physical S Pen acceptance and the intermittent right-edge report
 remain distinct from these synthetic checks; no speculative edge interception
 was added while that issue could not be reproduced.
+
+## Held-palm mode switching and repeated clear (2026-11-03)
+
+Mode changes finish the current stroke immediately and invalidate its old input
+generation before the window flags update. The same split-touch canvas window
+stays attached; only its touchability changes. The obscuring-opacity limit is
+cached instead of queried through the system service on each switch. Transient
+mode/drawer changes no longer trigger preference writes.
+
+Clear transfers the finished stroke list to the one-step undo history instead of
+copying it twice. Empty finish/clear calls return immediately. The clear button
+is always enabled and keeps a stable icon: the new window stress test reproduced
+a dropped tap when ink was recreated before Compose observed the enabled state.
+Removing this gate fixed that regression without a timer or click throttle.
+
+Validation: 117 JVM tests, build/lint (0 errors, 38 warnings), and 28 SM-X910
+instrumentation tests passed. The two new window cases retain the first pointer
+for 20 complete mode round trips and clears each (80 mode toggles total), with
+the palm starting either on the writable canvas or on an underlying test window.
+Both finger and synthetic stylus button taps are covered, along with stale pen
+events after switching, immediate write/clear, and independent clear/undo
+snapshots. The suite completed in 12.127 seconds. These are functional synthetic
+input tests, not a measured physical S Pen latency guarantee. Preferences were
+restored byte-for-byte, installed APK hash checked, and the test package removed.
+
+Post-install checking also caught Samsung Freecess freezing the new foreground
+service under `Bg-buff`, despite AppOps `allow`, a device-idle exemption, and the
+battery UI showing Unrestricted. The earlier 14:33:45 ANR likewise contains
+`do_freezer_trap`; an additional ANR occurred while inspecting the frozen app.
+The system battery UI was used to reapply Unrestricted for DrawAnywhere only
+(Optimized, then Unrestricted, accepting its confirmation). After a fresh app
+restart, three 30-second Freecess checks found no frozen entry; five actual ADB
+stylus draw/clear cycles passed screenshot comparisons, with no new ANR. This is
+a verified device-policy refresh, not a claim that the APK can override Samsung
+freezing or that a finite idle check guarantees it will never recur.

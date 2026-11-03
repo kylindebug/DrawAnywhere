@@ -30,7 +30,6 @@ fun DrawToolbar(
     val uiState by viewModel.uiState.collectAsState()
     val canUndo by viewModel.canUndo.collectAsState()
     val canRedo by viewModel.canRedo.collectAsState()
-    val canClearCanvas by viewModel.canClearCanvas.collectAsState()
 
     val haptics = LocalHapticFeedback.current
 
@@ -38,7 +37,6 @@ fun DrawToolbar(
         uiState = uiState,
         canUndo = canUndo,
         canRedo = canRedo,
-        canClearCanvas = canClearCanvas,
         onCanvasVisibilityToggle = {
             viewModel.toggleFirstDrawer()
         },

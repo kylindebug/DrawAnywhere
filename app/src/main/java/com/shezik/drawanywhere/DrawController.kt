@@ -40,7 +40,7 @@ class DrawController(initialConfig: PenConfig) {
 
     var onStrokesChanged: (() -> Unit)? = null
 
-    private val _strokeList = mutableListOf<Stroke>()
+    private var _strokeList = mutableListOf<Stroke>()
     val strokeList: List<Stroke>
         get() = _strokeList
 
@@ -78,7 +78,8 @@ class DrawController(initialConfig: PenConfig) {
     }
 
     fun finishStroke() {
-        activeTool?.onFinish()
+        val tool = activeTool ?: return
+        tool.onFinish()
         activeTool = null
         _canClear.value = _strokeList.any { !it.penType.isEraser }
     }
@@ -87,8 +88,11 @@ class DrawController(initialConfig: PenConfig) {
         // Freeze the in-progress stroke before retaining the clear undo snapshot.
         finishStroke()
         if (_strokeList.isEmpty()) return
-        undoRedo.push(DrawAction.ClearStrokes(_strokeList.toList()))
-        _strokeList.clear()
+        // The finished tool cannot mutate this list anymore. Transfer ownership
+        // to the one-step history instead of copying and clearing it on the UI thread.
+        val cleared = _strokeList
+        _strokeList = mutableListOf()
+        undoRedo.push(DrawAction.ClearStrokes(cleared))
         notifyChanged()
     }
 

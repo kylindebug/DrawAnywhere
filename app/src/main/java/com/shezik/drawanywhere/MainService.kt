@@ -25,7 +25,6 @@ import android.content.pm.ServiceInfo
 import android.content.res.Configuration
 import android.graphics.PixelFormat
 import android.graphics.Point
-import android.hardware.input.InputManager
 import android.os.Build
 import android.os.IBinder
 import android.view.Gravity
@@ -45,6 +44,8 @@ import androidx.core.app.ServiceCompat
 import com.shezik.drawanywhere.view.DismissTargetView
 import com.shezik.drawanywhere.view.ToolbarLifecycleOwner
 import com.shezik.drawanywhere.view.canvas.NativeDrawCanvasView
+import com.shezik.drawanywhere.view.canvas.CanvasInputWindow
+import com.shezik.drawanywhere.view.canvas.canvasInputState
 import com.shezik.drawanywhere.view.toolbar.DrawToolbar
 import com.shezik.drawanywhere.view.toolbar.ToolbarPlacement
 import com.shezik.drawanywhere.view.toolbar.ToolbarOrientation
@@ -118,7 +119,7 @@ class MainService : Service() {
                     LayoutParams.FLAG_LAYOUT_IN_SCREEN,
             PixelFormat.TRANSLUCENT
         )
-        applyCanvasPassthrough(canvasParams, initialUiState.canvasPassthrough)
+        val canvasInput = CanvasInputWindow(windowManager, canvasView, canvasParams, initialUiState.canvasInputState)
 
         // -------- Setup toolbar (Compose) --------
         toolbarLifecycleOwner.start()
@@ -191,20 +192,7 @@ class MainService : Service() {
         // Split touch lets the toolbar receive a new pointer while a palm is
         // still on the canvas. Tool/color changes do not alter either window.
         serviceScope.launch {
-            var previousInputState = Triple(initialUiState.canvasVisible,
-                initialUiState.canvasPassthrough, initialUiState.fingerDrawingEnabled)
-            viewModel.uiState.map { Triple(it.canvasVisible, it.canvasPassthrough, it.fingerDrawingEnabled) }
-                .distinctUntilChanged().collect { inputState ->
-                if (previousInputState != inputState) {
-                    canvasView.cancelInput()
-                }
-                if (previousInputState.second != inputState.second) {
-                    applyCanvasPassthrough(canvasParams, inputState.second)
-                    windowManager.updateViewLayout(canvasView, canvasParams)
-                }
-                canvasView.visibility = if (inputState.first) View.VISIBLE else View.GONE
-                previousInputState = inputState
-            }
+            viewModel.uiState.map { it.canvasInputState }.distinctUntilChanged().collect(canvasInput::apply)
         }
 
         // Observe service state changes
@@ -238,18 +226,6 @@ class MainService : Service() {
         }
 
         isRunning = true
-    }
-
-    private fun applyCanvasPassthrough(params: LayoutParams, passthrough: Boolean) {
-        params.flags = if (passthrough)
-            params.flags or LayoutParams.FLAG_NOT_TOUCHABLE
-        else
-            params.flags and LayoutParams.FLAG_NOT_TOUCHABLE.inv()
-        // Android 12+ blocks touches through opaque application overlays. Respect
-        // the system limit so the real finger stream reaches the underlying app.
-        params.alpha = if (passthrough && Build.VERSION.SDK_INT >= 31)
-            getSystemService(InputManager::class.java).maximumObscuringOpacityForTouch
-        else 1f
     }
 
     private fun applyToolbarPosition(params: LayoutParams, state: ServiceState) {

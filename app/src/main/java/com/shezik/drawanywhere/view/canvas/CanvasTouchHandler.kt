@@ -166,6 +166,7 @@ class CanvasTouchHandler(
             cancelInput()
             inputGeneration = viewModel.inputGeneration
         }
+        if (viewModel.uiState.value.canvasPassthrough || !viewModel.uiState.value.canvasVisible) return false
         // Ignore fingers in pen-only drawing mode. The hand button separately
         // switches the whole canvas to passthrough for underlying apps.
         if (!fingerDrawingEnabled() && event.actionMasked != MotionEvent.ACTION_CANCEL &&
