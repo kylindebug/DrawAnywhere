@@ -7,6 +7,16 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class ToolbarPlacementTest {
+    @Test fun simpleToolbarSnapsAtAllEdgesAndKeepsInteriorPosition() {
+        val size = IntSize(180, 60)
+        val screen = IntSize(1000, 1600)
+        assertEquals(Offset(0f, 400f), ToolbarPlacement.snap(Offset(12f, 400f), size, screen, 24f))
+        assertEquals(Offset(820f, 400f), ToolbarPlacement.snap(Offset(805f, 400f), size, screen, 24f))
+        assertEquals(Offset(400f, 0f), ToolbarPlacement.snap(Offset(400f, 5f), size, screen, 24f))
+        assertEquals(Offset(400f, 1540f), ToolbarPlacement.snap(Offset(400f, 1530f), size, screen, 24f))
+        assertEquals(Offset(400f, 500f), ToolbarPlacement.snap(Offset(400f, 500f), size, screen, 24f))
+        assertEquals(Offset(820f, 1540f), ToolbarPlacement.snap(Offset(2000f, 2000f), size, screen, 24f))
+    }
     @Test fun measureProvidesTheNewAnchorBeforeTheExpandedSurfaceIsPresented() {
         val screen = IntSize(1848, 2934)
         val anchor = Offset(1681f, 2870f)

@@ -122,10 +122,16 @@ class MainService : Service() {
         toolbarLifecycleOwner.start()
         chooseToolbarExpansion()
         toolbarView = ComposeView(this).apply {
+            // A docked toolbar must remain draggable away from the edge instead
+            // of having its horizontal gesture intercepted as system Back.
+            if (Build.VERSION.SDK_INT >= 29) addOnLayoutChangeListener { view, _, _, _, _, _, _, _, _ ->
+                view.systemGestureExclusionRects = listOf(android.graphics.Rect(0, 0, view.width, view.height))
+            }
             setContent { DrawToolbar(
                 viewModel = viewModel,
                 expandTowardStart = toolbarExpandsTowardStart,
                 onBeforeExpand = ::chooseToolbarExpansion,
+                onDragFinished = ::snapToolbarToEdge,
                 onGeometryMeasured = ::onToolbarMeasured,
                 onDragPosition = { local ->
                     viewModel.onDismissDragMove(local + toolbarWindowOrigin() -
@@ -238,46 +244,22 @@ class MainService : Service() {
     }
 
     private fun applyToolbarPosition(params: LayoutParams, state: ServiceState) {
-        val (screenWidth, screenHeight) = getUsableScreenSize(windowManager)
-        // Persist the compact eye's origin, never the expanded window's origin.
-        // Layout callbacks must not write the measured window position back into
-        // that anchor: doing so makes expansion drift and can oscillate forever.
-        val radius = 36f * resources.displayMetrics.density
-        val origin = Offset(
-            state.toolbarPosition.x.coerceIn(0f, (screenWidth - 2 * radius).coerceAtLeast(0f)),
-            state.toolbarPosition.y.coerceIn(0f, (screenHeight - 2 * radius).coerceAtLeast(0f)))
-        val eye = eyeInWindow ?: Offset(radius, radius)
-        val position = ToolbarPlacement.position(origin + Offset(radius, radius), eye,
-            measuredToolbarSize, IntSize(screenWidth, screenHeight)).round()
-        val reverseHorizontal = toolbarExpandsTowardStart &&
-            viewModel.uiState.value.toolbarOrientation == ToolbarOrientation.HORIZONTAL
-        val reverseVertical = toolbarExpandsTowardStart &&
-            viewModel.uiState.value.toolbarOrientation == ToolbarOrientation.VERTICAL
-        // Keep the eye-side window edge fixed. Repositioning a TOP/LEFT window
-        // for every size change can trigger a system move animation, displaying
-        // the expanded surface beyond the screen before sliding it back.
-        params.gravity = (if (reverseHorizontal) Gravity.RIGHT else Gravity.LEFT) or
-            (if (reverseVertical) Gravity.BOTTOM else Gravity.TOP)
-        params.x = if (reverseHorizontal) screenWidth - position.x - measuredToolbarSize.width else position.x
-        params.y = if (reverseVertical) screenHeight - position.y - measuredToolbarSize.height else position.y
-        if (origin != state.toolbarPosition) viewModel.setToolbarPosition(origin)
-    }
-
-    private fun chooseToolbarExpansion() {
-        settleToolbarAnchor()
         val (width, height) = getUsableScreenSize(windowManager)
-        val radius = 36f * resources.displayMetrics.density
-        toolbarExpandsTowardStart = ToolbarPlacement.towardStart(
-            viewModel.serviceState.value.toolbarPosition + Offset(radius, radius),
-            IntSize(width, height), viewModel.uiState.value.toolbarOrientation
-        )
+        val position = ToolbarPlacement.position(state.toolbarPosition, Offset.Zero,
+            measuredToolbarSize, IntSize(width, height))
+        params.gravity = Gravity.TOP or Gravity.LEFT
+        params.x = position.x.toInt()
+        params.y = position.y.toInt()
+        if (position != state.toolbarPosition) viewModel.setToolbarPosition(position)
     }
 
-    private fun settleToolbarAnchor() {
-        val eye = eyeInWindow ?: return
-        if (!::toolbarParams.isInitialized) return
-        val radius = 36f * resources.displayMetrics.density
-        viewModel.setToolbarPosition(toolbarWindowOrigin() + eye - Offset(radius, radius))
+    private fun chooseToolbarExpansion() { /* Three fixed buttons never reverse order. */ }
+
+    private fun snapToolbarToEdge() {
+        val (width, height) = getUsableScreenSize(windowManager)
+        viewModel.setToolbarPosition(ToolbarPlacement.snap(viewModel.serviceState.value.toolbarPosition,
+            measuredToolbarSize, IntSize(width, height), 24f * resources.displayMetrics.density))
+        viewModel.saveToolbarPosition()
     }
 
     private fun toolbarWindowOrigin(): Offset {

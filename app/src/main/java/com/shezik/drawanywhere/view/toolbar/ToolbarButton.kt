@@ -68,7 +68,7 @@ internal fun createAllToolbarButtons(
         id = "clear",
         icon = if (canClearCanvas) Icons.Filled.Delete else Icons.Outlined.Delete,
         contentDescription = stringResource(R.string.clear_canvas),
-        isEnabled = uiState.canvasVisible && canClearCanvas,
+        isEnabled = canClearCanvas,
         onClick = onClearCanvas
     ),
     ToolbarButton(
@@ -99,9 +99,9 @@ internal fun createAllToolbarButtons(
     ),
     ToolbarButton(
         id = "passthrough",
-        icon = if (uiState.canvasPassthrough) Icons.Default.DoNotTouch else Icons.Default.TouchApp,
-        contentDescription = if (uiState.canvasPassthrough) stringResource(R.string.disable_passthrough) else stringResource(R.string.enable_passthrough),
-        isEnabled = uiState.canvasVisible,
+        icon = if (uiState.canvasPassthrough || !uiState.canvasVisible) Icons.Default.EditOff else Icons.Default.Edit,
+        contentDescription = if (uiState.canvasPassthrough || !uiState.canvasVisible) stringResource(R.string.pen_disabled) else stringResource(R.string.pen_enabled),
+        isEnabled = true,
         onClick = onCanvasPassthroughToggle
     ),
     ToolbarButton(

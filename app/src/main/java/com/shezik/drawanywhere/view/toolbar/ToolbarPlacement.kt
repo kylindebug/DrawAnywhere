@@ -9,6 +9,18 @@ import androidx.compose.ui.window.PopupPositionProvider
 
 /** Keep the eye at its screen position while the surrounding menu changes size. */
 internal object ToolbarPlacement {
+    /** Snap only when released near an edge; otherwise keep the chosen position. */
+    fun snap(origin: Offset, size: IntSize, screen: IntSize, threshold: Float): Offset {
+        val p = position(origin, Offset.Zero, size, screen)
+        val maxX = (screen.width - size.width).coerceAtLeast(0).toFloat()
+        val maxY = (screen.height - size.height).coerceAtLeast(0).toFloat()
+        fun edge(v: Float, max: Float) = when {
+            v <= threshold && v <= max - v -> 0f
+            max - v <= threshold -> max
+            else -> v
+        }
+        return Offset(edge(p.x, maxX), edge(p.y, maxY))
+    }
     fun eyeOffset(size: IntSize, inset: Float, orientation: ToolbarOrientation,
         towardStart: Boolean): Offset = when {
         towardStart && orientation == ToolbarOrientation.HORIZONTAL -> Offset(size.width - inset, inset)

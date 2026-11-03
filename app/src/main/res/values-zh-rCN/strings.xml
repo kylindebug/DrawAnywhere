@@ -44,4 +44,6 @@
     <string name="hide_toolbar_items">隐藏工具栏其他项目</string>
     <string name="show_toolbar_items">显示工具栏其他项目</string>
     <string name="finger_drawing_mode_description">关闭“手指绘画”后仅用笔书写。需要操作底层应用时，请点击手掌按钮切换。绘画与触屏操作为独立模式。</string>
+    <string name="pen_enabled">S Pen 可写，点击切换为不可写</string>
+    <string name="pen_disabled">S Pen 不可写，点击切换为可写</string>
 </resources>
