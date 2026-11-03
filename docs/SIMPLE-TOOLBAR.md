@@ -32,3 +32,22 @@ removed, and the service restarted. These are synthetic input tests, not manual
 S Pen acceptance or a landscape grid validation.
 
 Precise eraser rendering and one-step undo/redo from the base branch are retained.
+
+## Clear during writing (2026-11-03)
+
+The first in-progress stroke previously left `canClearStrokes` false until pen-up,
+so the clear button stayed disabled while ink was already present. The controller
+now refreshes availability at stroke start and finish (including discarded tiny
+shapes). Clear finishes the active tool before retaining its undo snapshot.
+The view model advances an input generation on clear; the canvas discards the old
+pointer session and pending finger samples before accepting further events. A new
+pen-down starts normal writing again.
+
+Validation: 116 JVM tests and 10 SM-X910 instrumentation tests (four toolbar,
+six stylus/input) passed. The toolbar regression repeats pen-down, ink movement,
+and an actual clear-button tap with slight movement ten times without pen-up.
+Additional checks cover remaining stylus/button events, deferred finger input,
+undo/redo restoration, and discarded tiny shapes. Build/lint passed (0 errors,
+38 warnings). Original preferences were restored and the installed APK hash
+verified. These are synthetic input checks; they do not change Samsung's hardware
+palm-rejection behavior.

@@ -81,6 +81,7 @@ class CanvasTouchHandler(
     private val TAG = "DrawTouch"
 
     private var activePointerId: Int = -1
+    private var inputGeneration = viewModel.inputGeneration
     private var activePointerIsStylus = false
     // strokePending XOR strokeInProgress: pending during finger debounce (50ms),
     // progress once committed. Both false when idle or in multi-touch.
@@ -159,6 +160,10 @@ class CanvasTouchHandler(
         private set
 
     fun handleEvent(event: MotionEvent): Boolean {
+        if (inputGeneration != viewModel.inputGeneration) {
+            cancelInput()
+            inputGeneration = viewModel.inputGeneration
+        }
         // Ignore fingers in pen-only drawing mode. The hand button separately
         // switches the whole canvas to passthrough for underlying apps.
         if (!fingerDrawingEnabled() && event.actionMasked != MotionEvent.ACTION_CANCEL &&

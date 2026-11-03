@@ -241,7 +241,14 @@ class DrawViewModel(
         preferencesManager.saveServiceState(serviceState.value)
     }
 
-    fun clearCanvas() = controller.clearStrokes()
+    var inputGeneration: Long = 0
+        private set
+
+    fun clearCanvas() {
+        finishStroke()
+        inputGeneration++
+        controller.clearStrokes()
+    }
     fun undo() = controller.undo()
     fun redo() = controller.redo()
 

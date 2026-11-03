@@ -11,6 +11,27 @@ import org.junit.Test
 import org.junit.Assert.*
 
 class ToolbarGestureTest {
+    @Test fun clearButtonWorksBeforePenUpAndWithSmallTapMovement() {
+        val c = DrawController(PenConfig())
+        val vm = DrawViewModel(c, PreferencesManager(context), UiState(), ServiceState(), {})
+        rule.setContent { DrawToolbar(vm) }
+        repeat(10) {
+            rule.runOnIdle {
+                vm.startStroke(Offset.Zero, com.shezik.drawanywhere.model.StrokeModifier.None)
+                vm.updateStroke(Offset(100f, 100f))
+            }
+            rule.onNodeWithContentDescription(context.getString(R.string.clear_canvas))
+                .assertIsEnabled().performTouchInput {
+                    down(center); moveBy(Offset(2f, 1f)); up()
+                }
+            rule.runOnIdle {
+                assertTrue(c.strokeList.isEmpty())
+                vm.updateStroke(Offset(200f, 200f)); vm.finishStroke()
+                assertTrue(c.strokeList.isEmpty())
+                assertEquals(Offset(32f, 64f), vm.serviceState.value.toolbarPosition)
+            }
+        }
+    }
     @get:Rule val rule = createComposeRule()
     private val context get() = InstrumentationRegistry.getInstrumentation().targetContext
     private fun setup(): DrawViewModel {

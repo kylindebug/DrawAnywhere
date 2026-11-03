@@ -69,6 +69,8 @@ class DrawController(initialConfig: PenConfig) {
         val tool = penConfig.penType.createTool(toolContext)
         activeTool = tool
         tool.onStart(newPoint)
+        // Enable clear as soon as ink exists, not only after pen-up.
+        _canClear.value = _strokeList.any { !it.penType.isEraser }
     }
 
     fun updateLatestStroke(newPoint: Offset) {
@@ -78,9 +80,12 @@ class DrawController(initialConfig: PenConfig) {
     fun finishStroke() {
         activeTool?.onFinish()
         activeTool = null
+        _canClear.value = _strokeList.any { !it.penType.isEraser }
     }
 
     fun clearStrokes() {
+        // Freeze the in-progress stroke before retaining the clear undo snapshot.
+        finishStroke()
         if (_strokeList.isEmpty()) return
         undoRedo.push(DrawAction.ClearStrokes(_strokeList.toList()))
         _strokeList.clear()

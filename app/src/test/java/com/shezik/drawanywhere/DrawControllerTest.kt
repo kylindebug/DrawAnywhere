@@ -11,6 +11,30 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class DrawControllerTest {
+    @Test fun discardedTinyShapeDoesNotLeaveClearEnabled() {
+        val c = DrawController(PenConfig(penType = com.shezik.drawanywhere.model.PenType.Rectangle))
+        c.createStroke(Offset.Zero)
+        assertTrue(c.canClearStrokes.value)
+        c.finishStroke()
+        assertTrue(c.strokeList.isEmpty())
+        assertFalse(c.canClearStrokes.value)
+    }
+    @Test fun clearIsAvailableDuringFirstStrokeAndSnapshotCannotBeModifiedAfterClear() {
+        val c = DrawController(PenConfig())
+        assertFalse(c.canClearStrokes.value)
+        c.createStroke(Offset.Zero)
+        assertTrue(c.canClearStrokes.value)
+        c.updateLatestStroke(Offset(100f, 100f))
+        c.clearStrokes()
+        assertFalse(c.canClearStrokes.value)
+        c.updateLatestStroke(Offset(200f, 200f))
+        c.finishStroke()
+        assertTrue(c.strokeList.isEmpty())
+        c.undo()
+        assertEquals(listOf(Offset.Zero, Offset(100f, 100f)), c.strokeList.single().points)
+        c.redo()
+        assertTrue(c.strokeList.isEmpty())
+    }
 
     private fun newController() = DrawController(PenConfig())
 
