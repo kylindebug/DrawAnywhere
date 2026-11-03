@@ -22,6 +22,7 @@ internal data class ToolbarButton(
     val onClick: (() -> Unit)? = null,
     val popupPages: List<@Composable () -> Unit> = emptyList(),
     val iconContent: (@Composable () -> Unit)? = null,
+    val onPopupVisibilityChanged: (Boolean) -> Unit = {},
 ) {
     val hasPopup: Boolean
         get() = popupPages.isNotEmpty()
@@ -47,7 +48,9 @@ internal fun createAllToolbarButtons(
     onChangeVisibleOnStart: (Boolean) -> Unit,
     fingerDrawingEnabled: Boolean,
     onChangeFingerDrawingEnabled: (Boolean) -> Unit,
-    onQuitApplication: () -> Unit
+    onQuitApplication: () -> Unit,
+    onChangeAutoSwitch: (Boolean) -> Unit = {},
+    onPrepareAccessibilitySettings: () -> Unit = {},
 ): List<ToolbarButton> = listOf(
     ToolbarButton(
         id = "visibility",
@@ -124,6 +127,9 @@ internal fun createAllToolbarButtons(
                 onChangeVisibleOnStart = onChangeVisibleOnStart,
                 fingerDrawingEnabled = fingerDrawingEnabled,
                 onChangeFingerDrawingEnabled = onChangeFingerDrawingEnabled,
+                autoSwitchEnabled = uiState.autoSwitchEnabled,
+                onChangeAutoSwitch = onChangeAutoSwitch,
+                onPrepareAccessibilitySettings = onPrepareAccessibilitySettings,
                 onQuitApplication = onQuitApplication
             ) },
             { AboutScreen() }

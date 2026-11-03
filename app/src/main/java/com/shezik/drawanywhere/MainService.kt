@@ -29,6 +29,7 @@ import android.os.Build
 import android.os.IBinder
 import android.view.Gravity
 import android.view.View
+import android.view.MotionEvent
 import android.view.WindowInsets
 import android.view.WindowManager
 import android.view.WindowManager.LayoutParams
@@ -50,6 +51,7 @@ import com.shezik.drawanywhere.view.toolbar.DrawToolbar
 import com.shezik.drawanywhere.view.toolbar.ToolbarPlacement
 import com.shezik.drawanywhere.view.toolbar.ToolbarOrientation
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
@@ -76,15 +78,33 @@ class MainService : Service() {
     private lateinit var dismissTargetView: DismissTargetView
     private lateinit var preferencesManager: PreferencesManager
     private lateinit var viewModel: DrawViewModel
-    private val serviceScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
+    private val serviceScope = CoroutineScope(Dispatchers.Main + SupervisorJob() +
+        CoroutineExceptionHandler { _, error -> stopWithError(FailureStage.UPDATE_OVERLAY, error) })
+    private var failed = false
+    private var startupStage = FailureStage.START_SERVICE
     private var toolbarExpandsTowardStart by mutableStateOf(false)
     private var eyeInWindow: Offset? = null
     private var measuredToolbarSize = IntSize.Zero
     private lateinit var toolbarParams: LayoutParams
+    private var autoPenOnToolbar: Boolean? = null
+    private val autoPenLocation = IntArray(2)
+    private lateinit var canvasInput: CanvasInputWindow
 
     override fun onCreate() {
         super.onCreate()
+        OverlayStatus.state.value = OverlayState.Starting
+        try { initializeOverlay() }
+        catch (e: Exception) { stopWithError(startupStage, e) }
+        catch (e: LinkageError) { stopWithError(startupStage, e) }
+    }
 
+    private fun initializeOverlay() {
+        // Establish foreground status before disk reads / UI construction.
+        createNotificationChannel()
+        ServiceCompat.startForeground(this, NOTIFICATION_ID, createNotification(),
+            if (Build.VERSION.SDK_INT >= 34) ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE else 0)
+
+        startupStage = FailureStage.LOAD_SETTINGS
         preferencesManager = PreferencesManager(this)
         val (initialUiState, initialServiceState) = runBlocking {
             preferencesManager.getSavedUiState() to preferencesManager.getSavedServiceState()
@@ -97,14 +117,15 @@ class MainService : Service() {
             initialServiceState = initialServiceState,
             stopService = { stopSelf() },
             containsDismissTarget = { x, y -> dismissTargetView.containsScreenPoint(x, y) },
+            onFailure = { stopWithError(FailureStage.SAVE_SETTINGS, it) },
         )
 
+        startupStage = FailureStage.CREATE_OVERLAY
+        // Some systems hide denied overlay windows without throwing from addView.
+        // Recheck in the service as permission can change after the Activity check.
+        if (!android.provider.Settings.canDrawOverlays(this))
+            throw SecurityException("SYSTEM_ALERT_WINDOW permission is not granted")
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
-        createNotificationChannel()
-        ServiceCompat.startForeground(
-            this, NOTIFICATION_ID, createNotification(),
-            ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
-        )
 
         // -------- Setup native canvas --------
         canvasView = NativeDrawCanvasView(this, drawController, viewModel)
@@ -119,7 +140,7 @@ class MainService : Service() {
                     LayoutParams.FLAG_LAYOUT_IN_SCREEN,
             PixelFormat.TRANSLUCENT
         )
-        val canvasInput = CanvasInputWindow(windowManager, canvasView, canvasParams, initialUiState.canvasInputState)
+        canvasInput = CanvasInputWindow(windowManager, canvasView, canvasParams, initialUiState.canvasInputState)
 
         // -------- Setup toolbar (Compose) --------
         toolbarLifecycleOwner.start()
@@ -135,6 +156,7 @@ class MainService : Service() {
                 expandTowardStart = toolbarExpandsTowardStart,
                 onBeforeExpand = ::chooseToolbarExpansion,
                 onDragFinished = ::snapToolbarToEdge,
+                onPopupVisibilityChanged = AutoPenService::popup,
                 onGeometryMeasured = ::onToolbarMeasured,
                 onDragPosition = { local ->
                     viewModel.onDismissDragMove(local + toolbarWindowOrigin() -
@@ -185,8 +207,10 @@ class MainService : Service() {
 
         // Defer toolbar position validation until layout is complete
         toolbarView.post {
-            applyToolbarPosition(toolbarParams, viewModel.serviceState.value)
-            windowManager.updateViewLayout(toolbarView, toolbarParams)
+            updateWindow {
+                applyToolbarPosition(toolbarParams, viewModel.serviceState.value)
+                windowManager.updateViewLayout(toolbarView, toolbarParams)
+            }
         }
 
         // Split touch lets the toolbar receive a new pointer while a palm is
@@ -226,7 +250,67 @@ class MainService : Service() {
         }
 
         isRunning = true
+        AutoPenService.attach(onCancel = { canvasView.cancelInput(); autoPenOnToolbar = null }) {
+            event -> updateWindow { routeAutoPen(event) }
+        }
+        serviceScope.launch {
+            viewModel.uiState.map { it.autoSwitchEnabled && it.canvasVisible }.distinctUntilChanged()
+                .collect(AutoPenService::enable)
+        }
+        OverlayStatus.state.value = OverlayState.Running
     }
+
+    private fun routeAutoPen(event: MotionEvent) {
+        val location = autoPenLocation
+        toolbarView.getLocationOnScreen(location)
+        val overToolbar = event.rawX >= location[0] && event.rawX < location[0] + toolbarView.width &&
+            event.rawY >= location[1] && event.rawY < location[1] + toolbarView.height
+        if (event.actionMasked == MotionEvent.ACTION_DOWN) {
+            autoPenOnToolbar = overToolbar
+            if (!overToolbar) {
+                canvasView.cancelInput()
+                viewModel.setCanvasPassthrough(false)
+                // Apply synchronously before the captured DOWN. Otherwise the
+                // flow collector could cancel the first stroke on its next turn.
+                canvasInput.apply(viewModel.uiState.value.canvasInputState)
+            }
+        }
+        val touch = when (event.actionMasked) {
+            MotionEvent.ACTION_DOWN, MotionEvent.ACTION_MOVE, MotionEvent.ACTION_UP,
+            MotionEvent.ACTION_CANCEL, MotionEvent.ACTION_POINTER_DOWN, MotionEvent.ACTION_POINTER_UP -> true
+            else -> false
+        }
+        if (touch && autoPenOnToolbar == null) return
+        val toolbar = if (touch) autoPenOnToolbar == true else overToolbar
+        val target = if (toolbar) toolbarView else canvasView
+        target.getLocationOnScreen(location)
+        val local = MotionEvent.obtain(event)
+        local.setLocation(event.rawX - location[0], event.rawY - location[1])
+        try {
+            if (touch) target.dispatchTouchEvent(local) else target.dispatchGenericMotionEvent(local)
+        } finally { local.recycle() }
+        if (event.actionMasked == MotionEvent.ACTION_UP || event.actionMasked == MotionEvent.ACTION_CANCEL)
+            autoPenOnToolbar = null
+    }
+
+    private fun stopWithError(stage: FailureStage, error: Throwable) {
+        if (failed) return
+        failed = true
+        isRunning = false
+        AutoPenService.detach()
+        CompatibilityErrors.report(this, stage, error)
+        CompatibilityErrors.notifyStopped(this)
+        stopSelf()
+    }
+
+    private inline fun updateWindow(action: () -> Unit) {
+        if (failed) return
+        try { action() }
+        catch (e: RuntimeException) { stopWithError(FailureStage.UPDATE_OVERLAY, e) }
+        catch (e: LinkageError) { stopWithError(FailureStage.UPDATE_OVERLAY, e) }
+    }
+
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int = START_NOT_STICKY
 
     private fun applyToolbarPosition(params: LayoutParams, state: ServiceState) {
         val (width, height) = getUsableScreenSize(windowManager)
@@ -260,7 +344,7 @@ class MainService : Service() {
         if (eyeInWindow == localEye && measuredToolbarSize == size) return
         eyeInWindow = localEye
         measuredToolbarSize = size
-        if (toolbarView.isAttachedToWindow) {
+        if (toolbarView.isAttachedToWindow) updateWindow {
             applyToolbarPosition(toolbarParams, viewModel.serviceState.value)
             windowManager.updateViewLayout(toolbarView, toolbarParams)
         }
@@ -268,7 +352,7 @@ class MainService : Service() {
 
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
-        if (::toolbarView.isInitialized && toolbarView.isAttachedToWindow) {
+        if (::toolbarView.isInitialized && toolbarView.isAttachedToWindow) updateWindow {
             applyToolbarPosition(toolbarParams, viewModel.serviceState.value)
             windowManager.updateViewLayout(toolbarView, toolbarParams)
             chooseToolbarExpansion()
@@ -291,15 +375,19 @@ class MainService : Service() {
     override fun onDestroy() {
         super.onDestroy()
         isRunning = false
-        if (::canvasView.isInitialized) canvasView.cancelInput()
+        AutoPenService.detach()
         serviceScope.cancel()
-        if (::toolbarView.isInitialized && toolbarView.isAttachedToWindow)
-            windowManager.removeView(toolbarView)
-        if (::canvasView.isInitialized && canvasView.isAttachedToWindow)
-            windowManager.removeView(canvasView)
-        if (::dismissTargetView.isInitialized && dismissTargetView.isAttachedToWindow)
-            windowManager.removeView(dismissTargetView)
-        toolbarLifecycleOwner.stop()
+        if (::viewModel.isInitialized) viewModel.close()
+        val views = listOfNotNull(if (::toolbarView.isInitialized) toolbarView else null,
+            if (::canvasView.isInitialized) canvasView else null,
+            if (::dismissTargetView.isInitialized) dismissTargetView else null)
+        for (view in views) {
+            try { if (view.isAttachedToWindow) windowManager.removeViewImmediate(view) }
+            catch (e: RuntimeException) { android.util.Log.w("DrawCompatibility", "Window cleanup failed", e) }
+        }
+        try { toolbarLifecycleOwner.stop() }
+        catch (e: RuntimeException) { android.util.Log.w("DrawCompatibility", "Lifecycle cleanup failed", e) }
+        if (!failed) OverlayStatus.state.value = OverlayState.Idle
     }
 
     override fun onBind(intent: Intent?): IBinder? = null

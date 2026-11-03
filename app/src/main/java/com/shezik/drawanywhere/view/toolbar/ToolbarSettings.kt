@@ -27,7 +27,10 @@ internal fun ToolbarControls(
     onChangeVisibleOnStart: (Boolean) -> Unit,
     fingerDrawingEnabled: Boolean,
     onChangeFingerDrawingEnabled: (Boolean) -> Unit,
-    onQuitApplication: () -> Unit
+    onQuitApplication: () -> Unit,
+    autoSwitchEnabled: Boolean = false,
+    onChangeAutoSwitch: (Boolean) -> Unit = {},
+    onPrepareAccessibilitySettings: () -> Unit = {},
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
         Text(
@@ -63,12 +66,13 @@ internal fun ToolbarControls(
             isChecked = visibleOnStart,
             onCheckedChange = onChangeVisibleOnStart
         )
-        CheckboxControl(
+        AutoModeControls(autoSwitchEnabled, onChangeAutoSwitch, onPrepareAccessibilitySettings)
+        if (!autoSwitchEnabled) CheckboxControl(
             label = stringResource(R.string.finger_drawing),
             isChecked = fingerDrawingEnabled,
             onCheckedChange = onChangeFingerDrawingEnabled
         )
-        Text(stringResource(R.string.finger_drawing_mode_description),
+        if (!autoSwitchEnabled) Text(stringResource(R.string.finger_drawing_mode_description),
             style = MaterialTheme.typography.bodySmall)
         Button(
             onClick = onQuitApplication,
@@ -124,6 +128,11 @@ internal fun AboutScreen() {
                 textAlign = TextAlign.Center,
                 color = MaterialTheme.colorScheme.onSurface
             )
+            androidx.compose.foundation.text.selection.SelectionContainer {
+                Text("https://github.com/kylindebug/DrawAnywhere/tree/feature/simple-toolbar",
+                    style = MaterialTheme.typography.bodySmall,
+                    textAlign = TextAlign.Center)
+            }
         }
     }
 }

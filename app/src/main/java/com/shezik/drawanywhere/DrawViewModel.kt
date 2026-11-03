@@ -51,6 +51,7 @@ data class UiState(
     val autoClearCanvas: Boolean = false,
     val visibleOnStart: Boolean = true,
     val fingerDrawingEnabled: Boolean = true,
+    val autoSwitchEnabled: Boolean = false,
     val recentColors: List<Color> = emptyList(),
 
     val currentPenType: PenType = PenType.Pen,
@@ -89,7 +90,11 @@ class DrawViewModel(
     initialServiceState: ServiceState,
     private val stopService: () -> Unit,
     private val containsDismissTarget: (Int, Int) -> Boolean = { _, _ -> false },
+    private val onFailure: (Throwable) -> Unit = { throw it },
 ) : ViewModel() {
+    private val taskScope = kotlinx.coroutines.CoroutineScope(viewModelScope.coroutineContext +
+        kotlinx.coroutines.CoroutineExceptionHandler { _, error -> onFailure(error) })
+    fun close() { viewModelScope.coroutineContext[kotlinx.coroutines.Job]?.cancel() }
     companion object {
         const val TOOLBAR_DIM_DELAY_MS = 3_000L
         const val TOOLBAR_DIM_ALPHA = 0.5f
@@ -124,7 +129,7 @@ class DrawViewModel(
             .distinctUntilChanged()
             .debounce(300)
             .onEach { state -> preferencesManager.saveUiState(state) }
-            .launchIn(viewModelScope)
+            .launchIn(taskScope)
 
         resetToolbarTimer()
     }
@@ -205,6 +210,12 @@ class DrawViewModel(
     fun toggleCanvasPassthrough() =
         setCanvasPassthrough(!uiState.value.canvasPassthrough)
 
+    fun setAutoSwitchEnabled(enabled: Boolean) {
+        finishStroke()
+        inputGeneration++
+        _uiState.update { it.copy(autoSwitchEnabled = enabled) }
+    }
+
     fun setCanvasPassthrough(passthrough: Boolean) {
         if (passthrough == uiState.value.canvasPassthrough) return
         // Finish immediately, before the asynchronous window flag update. This
@@ -249,7 +260,7 @@ class DrawViewModel(
     fun updateToolbarPosition(offset: Offset) =
         setToolbarPosition(serviceState.value.toolbarPosition + offset)
 
-    fun saveToolbarPosition() = viewModelScope.launch {
+    fun saveToolbarPosition() = taskScope.launch {
         preferencesManager.saveServiceState(serviceState.value)
     }
 
@@ -269,7 +280,7 @@ class DrawViewModel(
     fun resetToolbarTimer() {
         dimmingJob?.cancel()
         setToolbarActive(true)
-        dimmingJob = viewModelScope.launch {
+        dimmingJob = taskScope.launch {
             delay(TOOLBAR_DIM_DELAY_MS)
             setToolbarActive(false)
         }
@@ -378,7 +389,7 @@ class DrawViewModel(
     }
 
     fun quitApplication(savePosition: Boolean = true) {
-        viewModelScope.launch {
+        taskScope.launch {
             preferencesManager.saveUiState(uiState.value)
             if (savePosition) preferencesManager.saveServiceState(serviceState.value)
             stopService()

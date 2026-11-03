@@ -13,14 +13,15 @@ android {
         applicationId = "com.shezik.drawanywhere"
         minSdk = 26
         targetSdk = 36
-        versionCode = 5
-        versionName = "2.3"
+        versionCode = 6
+        versionName = "2.3-simple.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     buildTypes {
         release {
+            applicationIdSuffix = ".simple"
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(

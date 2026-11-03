@@ -69,11 +69,28 @@ class NativeDrawCanvasView(
         },
         onThreeFingerDoubleTap = { viewModel.toggleCanvasPassthrough() },
         onThreeFingerTripleTap = { viewModel.setCanvasVisibility(false) },
-        fingerDrawingEnabled = { viewModel.uiState.value.fingerDrawingEnabled },
+        fingerDrawingEnabled = { viewModel.uiState.value.fingerDrawingEnabled && !viewModel.uiState.value.autoSwitchEnabled },
     )
 
-    override fun onTouchEvent(event: MotionEvent): Boolean =
-        touchHandler.handleEvent(event)
+    private val autoFinger = FingerModeGesture(48f * resources.displayMetrics.density)
+    override fun onTouchEvent(event: MotionEvent): Boolean {
+        if (viewModel.uiState.value.autoSwitchEnabled &&
+            com.shezik.drawanywhere.AutoPenService.connected.value &&
+            (0 until event.pointerCount).all { event.getToolType(it) == MotionEvent.TOOL_TYPE_FINGER }) {
+            if (event.pointerCount != 1 || com.shezik.drawanywhere.AutoPenService.penDown) autoFinger.cancel()
+            else when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> autoFinger.down(event.x, event.y)
+                MotionEvent.ACTION_MOVE -> if (autoFinger.move(event.x, event.y)) {
+                    cancelInput()
+                    viewModel.setCanvasPassthrough(true)
+                }
+                MotionEvent.ACTION_CANCEL, MotionEvent.ACTION_UP -> autoFinger.cancel()
+            }
+            return true
+        }
+        autoFinger.cancel()
+        return touchHandler.handleEvent(event)
+    }
 
     fun cancelInput() = touchHandler.cancelInput()
 

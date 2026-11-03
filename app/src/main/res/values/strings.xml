@@ -1,4 +1,23 @@
 <resources>
+    <string name="auto_mode">Auto mode (experimental)</string>
+    <string name="auto_mode_description">A single finger sliding 48 dp switches to touch control; lift and swipe again if needed. A pen stroke switches back to writing. Finger drawing is suspended in this mode. Enable this app’s accessibility service. Compatibility varies by device and system version.</string>
+    <string name="auto_mode_requires_android">Auto mode requires Android 14 or newer. Manual switching remains available.</string>
+    <string name="auto_mode_ready">Accessibility service connected. Auto mode is ready.</string>
+    <string name="auto_mode_needs_service">Auto mode is waiting for its accessibility service. Until enabled, use the mode button.</string>
+    <string name="auto_mode_open_settings">Enable accessibility service</string>
+    <string name="auto_mode_service_description">Optional automatic switching for DrawAnywhere. While its toolbar is running in auto mode, this service receives pen events so the first stroke can return to writing. It does not read screen contents. Finger scrolling uses normal system touch input.</string>
+    <string name="starting_overlay">Starting drawing toolbar…</string>
+    <string name="error_title">DrawAnywhere could not continue</string>
+    <string name="error_permission">The system denied a required permission. Allow display over other apps and background operation in app settings, then try again.</string>
+    <string name="error_system_api">This device does not provide a required system interface. Check the Android version and app permissions. Copy the details below when reporting this problem.</string>
+    <string name="error_settings">The app could not read or save its settings. Check available storage and copy the details below. Your settings have not been reset.</string>
+    <string name="error_window">The system could not create or update the drawing window. Check overlay permission and restart the app. Copy the details below if the problem continues.</string>
+    <string name="error_startup">The system could not start the drawing service. Open the app from its icon and allow background operation. Copy the details below if the problem continues.</string>
+    <string name="error_stopped">Drawing stopped. Open DrawAnywhere to view the error details.</string>
+    <string name="error_copy">Copy details</string>
+    <string name="error_retry">Try again</string>
+    <string name="error_close">Close</string>
+    <string name="error_copied">Error details copied</string>
     <string name="app_name">DrawAnywhere</string>
     <string name="permission_required">Permission Required</string>
     <string name="overlay_permission_description">This application needs overlay permission to place the canvas on top of other apps.</string>
@@ -42,7 +61,7 @@
     <string name="licenses" >App icon by Solar Icons, licensed under CC BY 4.0.</string>
     <string name="hide_toolbar_items">Hide toolbar items</string>
     <string name="show_toolbar_items">Show toolbar items</string>
-    <string name="finger_drawing_mode_description">Turn off Finger drawing to draw only with the pen. Use the hand button to operate the app below. Drawing and app interaction are separate modes.</string>
+    <string name="finger_drawing_mode_description">Turn off Finger drawing to draw only with the pen. Use the pen / crossed-out pen button to switch between drawing and operating the app below.</string>
     <string name="pen_enabled">S Pen writing on — tap to disable</string>
     <string name="pen_disabled">S Pen writing off — tap to enable</string>
 </resources>

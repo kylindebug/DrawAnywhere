@@ -27,6 +27,8 @@ import androidx.compose.ui.window.PopupProperties
 import com.shezik.drawanywhere.R
 import com.shezik.drawanywhere.ui.theme.Spacing
 
+internal val LocalDismissToolbarPopup = staticCompositionLocalOf<() -> Unit> { {} }
+
 @Composable
 internal fun RenderButton(button: ToolbarButton, popupAlignment: Alignment, modifier: Modifier = Modifier) {
     if (button.hasPopup) {
@@ -105,9 +107,12 @@ internal fun PopupToolbarButton(
     popupAlignment: Alignment
 ) {
     var isPopupOpen by remember { mutableStateOf(false) }
+    val visibilityChanged by rememberUpdatedState(button.onPopupVisibilityChanged)
+    DisposableEffect(Unit) { onDispose { visibilityChanged(false) } }
+    fun closePopup() { isPopupOpen = false; visibilityChanged(false) }
     Box(modifier = modifier) {
         IconButton(
-            onClick = { isPopupOpen = !isPopupOpen },
+            onClick = { isPopupOpen = !isPopupOpen; visibilityChanged(isPopupOpen) },
             enabled = button.isEnabled,
             modifier = Modifier.background(
                 color = if (isPopupOpen) MaterialTheme.colorScheme.primaryContainer
@@ -131,7 +136,7 @@ internal fun PopupToolbarButton(
                 popupPositionProvider = remember(popupAlignment, gap) {
                     ToolbarPopupPositionProvider(popupAlignment == Alignment.TopCenter, gap)
                 },
-                onDismissRequest = { isPopupOpen = false },
+                onDismissRequest = ::closePopup,
                 properties = PopupProperties(focusable = true)
             ) {
                 Card(
@@ -145,12 +150,14 @@ internal fun PopupToolbarButton(
                         modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(Spacing.lg),
                         verticalArrangement = Arrangement.spacedBy(Spacing.sm)
                     ) {
+                        CompositionLocalProvider(LocalDismissToolbarPopup provides ::closePopup) {
                         if (button.popupPages.size == 1) button.popupPages.first().invoke()
                         else HorizontalPager(
                             state = pagerState,
                             modifier = Modifier.animateContentSize(),
                             verticalAlignment = Alignment.Top
                         ) { page -> button.popupPages[page].invoke() }
+                        }
                         if (button.popupPages.size > 1) {
                             Row(
                                 Modifier.fillMaxWidth(),

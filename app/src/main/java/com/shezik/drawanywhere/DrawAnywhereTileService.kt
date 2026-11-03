@@ -16,9 +16,11 @@ class DrawAnywhereTileService: TileService(){
 
         if (MainService.isRunning) {
             stopService(serviceIntent)
-            qsTile.state = Tile.STATE_INACTIVE
+            qsTile?.state = Tile.STATE_INACTIVE
         } else {
-            if (!Settings.canDrawOverlays(this)) {
+            // Start through the visible Activity so compatibility failures can
+            // be reported in a dialog, including blocked foreground startup.
+            try {
                 val permissionIntent = Intent(this, MainActivity::class.java)
                 permissionIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
 
@@ -30,19 +32,22 @@ class DrawAnywhereTileService: TileService(){
                     startActivityAndCollapse(permissionIntent)
                 }
 
-                return
+            } catch (e: RuntimeException) {
+                CompatibilityErrors.report(this, FailureStage.START_SERVICE, e)
+                CompatibilityErrors.notifyStopped(this)
+            } catch (e: LinkageError) {
+                CompatibilityErrors.report(this, FailureStage.START_SERVICE, e)
+                CompatibilityErrors.notifyStopped(this)
             }
-            startForegroundService(serviceIntent)
-            qsTile.state = Tile.STATE_ACTIVE
         }
 
-        qsTile.updateTile()
+        qsTile?.updateTile()
     }
 
     override fun onStartListening() {
         super.onStartListening()
-        qsTile.state = if (MainService.isRunning) Tile.STATE_ACTIVE else Tile.STATE_INACTIVE
-        qsTile.updateTile()
+        qsTile?.state = if (MainService.isRunning) Tile.STATE_ACTIVE else Tile.STATE_INACTIVE
+        qsTile?.updateTile()
     }
 
 }

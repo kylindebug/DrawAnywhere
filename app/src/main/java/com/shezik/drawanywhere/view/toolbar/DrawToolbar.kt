@@ -25,7 +25,8 @@ fun DrawToolbar(
     onBeforeExpand: () -> Unit = {},
     onGeometryMeasured: (Offset, IntSize) -> Unit = { _, _ -> },
     onDragPosition: ((Offset) -> Unit)? = null,
-    onDragFinished: (() -> Unit)? = null
+    onDragFinished: (() -> Unit)? = null,
+    onPopupVisibilityChanged: (Boolean) -> Unit = {},
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val canUndo by viewModel.canUndo.collectAsState()
@@ -62,7 +63,9 @@ fun DrawToolbar(
         onChangeVisibleOnStart = viewModel::setVisibleOnStart,
         fingerDrawingEnabled = uiState.fingerDrawingEnabled,
         onChangeFingerDrawingEnabled = viewModel::setFingerDrawingEnabled,
-        onQuitApplication = viewModel::quitApplication
+        onQuitApplication = viewModel::quitApplication,
+        onChangeAutoSwitch = viewModel::setAutoSwitchEnabled,
+        onPrepareAccessibilitySettings = { viewModel.setCanvasPassthrough(true) },
     ).associateBy { it.id }
 
     DrawAnywhereTheme {
@@ -94,7 +97,8 @@ fun DrawToolbar(
                     onExpandToggleClick = {
                                     viewModel.toggleToolbarCollapsed()
                     },
-                    expandTowardStart = expandTowardStart
+                    expandTowardStart = expandTowardStart,
+                    onPopupVisibilityChanged = onPopupVisibilityChanged,
                 )
             }
         }
@@ -107,14 +111,15 @@ internal fun ToolbarButtonsContainer(
     uiState: com.shezik.drawanywhere.UiState,
     allButtonsMap: Map<String, ToolbarButton>,
     onExpandToggleClick: () -> Unit,
-    expandTowardStart: Boolean = false
+    expandTowardStart: Boolean = false,
+    onPopupVisibilityChanged: (Boolean) -> Unit = {},
 ) {
     val alignment = if (uiState.toolbarOrientation == ToolbarOrientation.HORIZONTAL)
         Alignment.TopCenter else Alignment.CenterEnd
     @Composable fun Buttons() {
         RenderButton(allButtonsMap.getValue("passthrough"), alignment)
         RenderButton(allButtonsMap.getValue("clear"), alignment)
-        RenderButton(allButtonsMap.getValue("settings").copy(popupPages = listOf({
+        RenderButton(allButtonsMap.getValue("settings").copy(onPopupVisibilityChanged = onPopupVisibilityChanged, popupPages = listOf({
             SimpleSettings(allButtonsMap)
         })), alignment)
     }

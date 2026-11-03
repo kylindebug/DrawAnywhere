@@ -1,5 +1,24 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="auto_mode">自动模式（实验性）</string>
+    <string name="auto_mode_description">单指滑动 48 dp 后切到触控，必要时抬手再滑一次；笔落下后切回书写。此模式暂停手指绘画。需要启用本应用的无障碍服务，兼容性因设备和系统版本而异。</string>
+    <string name="auto_mode_requires_android">自动模式需要 Android 14 或更新版本；当前设备仍可手动切换。</string>
+    <string name="auto_mode_ready">无障碍服务已连接，自动模式已就绪。</string>
+    <string name="auto_mode_needs_service">等待启用本应用的无障碍服务，启用前请使用模式按钮。</string>
+    <string name="auto_mode_open_settings">启用无障碍服务</string>
+    <string name="auto_mode_service_description">DrawAnywhere 的可选自动切换功能。仅在工具栏运行且开启自动模式时接收笔事件，使首笔能够切回书写；不读取屏幕内容。手指滑动仍使用系统正常触控。</string>
+    <string name="starting_overlay">正在启动绘画工具栏…</string>
+    <string name="error_title">DrawAnywhere 无法继续运行</string>
+    <string name="error_permission">系统拒绝了必要权限。请在应用设置中允许悬浮窗和后台运行，然后重试。</string>
+    <string name="error_system_api">这台设备缺少所需的系统接口。请检查 Android 版本和应用权限，反馈问题时可复制下方详情。</string>
+    <string name="error_settings">无法读取或保存应用设置。请检查存储空间并复制下方详情。应用没有重置你的设置。</string>
+    <string name="error_window">系统无法创建或更新绘画窗口。请检查悬浮窗权限并重新打开应用，仍失败时可复制下方详情。</string>
+    <string name="error_startup">系统无法启动绘画服务。请从应用图标打开，并允许后台运行，仍失败时可复制下方详情。</string>
+    <string name="error_stopped">绘画已停止，请打开 DrawAnywhere 查看错误详情。</string>
+    <string name="error_copy">复制详情</string>
+    <string name="error_retry">重试</string>
+    <string name="error_close">关闭</string>
+    <string name="error_copied">已复制错误详情</string>
     <string name="app_name">DrawAnywhere</string>
     <string name="permission_required">需要权限</string>
     <string name="overlay_permission_description">此应用需要悬浮窗权限来将画布放置在其他应用上。</string>
@@ -43,7 +62,7 @@
     <string name="licenses">应用图标来自 Solar Icons, 采用 CC BY 4.0 协议授权。</string>
     <string name="hide_toolbar_items">隐藏工具栏其他项目</string>
     <string name="show_toolbar_items">显示工具栏其他项目</string>
-    <string name="finger_drawing_mode_description">关闭“手指绘画”后仅用笔书写。需要操作底层应用时，请点击手掌按钮切换。绘画与触屏操作为独立模式。</string>
+    <string name="finger_drawing_mode_description">关闭“手指绘画”后仅用笔书写。点击笔／斜杠笔按钮，在书写与操作底层应用之间切换。</string>
     <string name="pen_enabled">S Pen 可写，点击切换为不可写</string>
     <string name="pen_disabled">S Pen 不可写，点击切换为可写</string>
 </resources>

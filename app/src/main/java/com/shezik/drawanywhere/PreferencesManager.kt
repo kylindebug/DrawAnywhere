@@ -44,6 +44,7 @@ class PreferencesManager(private val context: Context) {
         val AUTO_CLEAR_CANVAS = booleanPreferencesKey("auto_clear_canvas")
         val VISIBLE_ON_START = booleanPreferencesKey("visible_on_start")
         val FINGER_DRAWING_ENABLED = booleanPreferencesKey("finger_drawing_enabled")
+        val AUTO_SWITCH_ENABLED = booleanPreferencesKey("auto_switch_enabled")
         val RECENT_COLORS = stringPreferencesKey("recent_colors")
 
         // Pen-specific keys (for saving multiple pens)
@@ -114,6 +115,7 @@ class PreferencesManager(private val context: Context) {
 
             visibleOnStart = visibleOnStart,
             fingerDrawingEnabled = fingerDrawingEnabled,
+            autoSwitchEnabled = preferences[PreferencesKeys.AUTO_SWITCH_ENABLED] ?: false,
             recentColors = recentColors,
             canvasVisible = visibleOnStart,
             firstDrawerOpen = visibleOnStart
@@ -127,6 +129,7 @@ class PreferencesManager(private val context: Context) {
             preferences[PreferencesKeys.AUTO_CLEAR_CANVAS] = uiState.autoClearCanvas
             preferences[PreferencesKeys.VISIBLE_ON_START] = uiState.visibleOnStart
             preferences[PreferencesKeys.FINGER_DRAWING_ENABLED] = uiState.fingerDrawingEnabled
+            preferences[PreferencesKeys.AUTO_SWITCH_ENABLED] = uiState.autoSwitchEnabled
             preferences[PreferencesKeys.RECENT_COLORS] = uiState.recentColors.joinToString(",") { it.toArgb().toString(16).padStart(8, '0') }
 
             // Save each pen's configuration

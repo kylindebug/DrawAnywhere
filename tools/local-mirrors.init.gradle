@@ -1,0 +1,25 @@
+beforeSettings { settings ->
+    def useMirror = { repo ->
+        if (repo instanceof org.gradle.api.artifacts.repositories.MavenArtifactRepository) {
+            def source = repo.url.toString()
+            if (source.contains('dl.google.com') || source.contains('maven.google.com')) {
+                repo.url = uri('https://maven.aliyun.com/repository/google')
+            } else if (source.contains('repo.maven.apache.org') || source.contains('repo1.maven.org')) {
+                repo.url = uri('https://maven.aliyun.com/repository/central')
+            }
+        }
+    }
+    settings.pluginManagement.repositories.all(useMirror)
+    settings.dependencyResolutionManagement.repositories.all(useMirror)
+}
+
+// Use the already installed minor platform for local validation only.
+allprojects { project ->
+    project.plugins.withId('com.android.application') {
+        project.extensions.getByName('androidComponents').finalizeDsl { android ->
+            android.compileSdk {
+                version = release(37) { minorApiLevel = 2 }
+            }
+        }
+    }
+}
