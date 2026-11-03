@@ -32,8 +32,22 @@ object PenRenderer : Renderer {
         } else canvas.drawPath(pathFor(stroke), paint)
     }
 
-    internal fun pathFor(stroke: Stroke): Path = stroke.cachedPath
-        ?: buildPath(stroke.points).also { stroke.cachedPath = it }
+    internal fun pathFor(stroke: Stroke): Path {
+        stroke.cachedPath?.let { return it }
+        val points = stroke.points
+        if (points.isEmpty()) return Path().also { stroke.cachedPath = it }
+        val prefix = stroke.pathPrefix ?: Path().apply {
+            moveTo(points[0].x, points[0].y)
+        }.also { stroke.pathPrefix = it; stroke.pathPointCount = 1 }
+        for (i in stroke.pathPointCount - 1 until points.lastIndex) {
+            val a = points[i]; val b = points[i + 1]
+            val mx = (a.x + b.x) / 2f; val my = (a.y + b.y) / 2f
+            if (i == 0) prefix.lineTo(mx, my) else prefix.quadTo(a.x, a.y, mx, my)
+        }
+        stroke.pathPointCount = points.size
+        return Path(prefix).apply { lineTo(points.last().x, points.last().y) }
+            .also { stroke.cachedPath = it }
+    }
 
     fun buildPath(points: List<Offset>): Path {
         val p = Path()

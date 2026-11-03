@@ -10,6 +10,21 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class StylusInputTest {
+    @Test fun hoveringButtonUpdatesPreviewWithoutStartingStroke() = onMain {
+        val (c, vm, handler) = setup()
+        send(handler, MotionEvent.ACTION_HOVER_ENTER, 100f, 100f)
+        assertEquals(StrokeModifier.None, handler.hoverState!!.modifier)
+        send(handler, MotionEvent.ACTION_BUTTON_PRESS, 100f, 100f, MotionEvent.BUTTON_STYLUS_PRIMARY)
+        assertEquals(StrokeModifier.PrimaryButton, handler.hoverState!!.modifier)
+        assertEquals(PenType.Pen, vm.uiState.value.currentPenType)
+        assertFalse(c.canClearStrokes.value)
+        send(handler, MotionEvent.ACTION_HOVER_MOVE, 120f, 120f, MotionEvent.BUTTON_STYLUS_PRIMARY)
+        assertEquals(StrokeModifier.PrimaryButton, handler.hoverState!!.modifier)
+        send(handler, MotionEvent.ACTION_BUTTON_RELEASE, 120f, 120f)
+        assertEquals(StrokeModifier.None, handler.hoverState!!.modifier)
+        assertTrue(c.strokeList.isEmpty())
+        assertFalse(c.canUndo.value)
+    }
     @Test fun clearDiscardsRemainingPenAndPendingFingerEvents() = onMain {
         val (c, vm, handler) = setup(fingers = true)
         send(handler, MotionEvent.ACTION_DOWN, 10f, 10f)

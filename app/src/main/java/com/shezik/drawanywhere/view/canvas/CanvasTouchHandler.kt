@@ -38,6 +38,7 @@ internal data class HoverState(
     val fadeStartTimeMs: Long = 0L,
     val delayMs: Long = STYLUS_HOVER_DELAY_MS,
     val fadeMs: Long = HOVER_FADE_MS,
+    val modifier: StrokeModifier = StrokeModifier.None,
 ) {
     val isFading: Boolean get() = fadeStartTimeMs > 0L
 }
@@ -140,6 +141,7 @@ class CanvasTouchHandler(
     }
 
     private fun logPointers(event: MotionEvent, prefix: String = "") {
+        if (!Log.isLoggable(TAG, Log.DEBUG)) return
         val sb = StringBuilder("$prefix ptrs=${event.pointerCount} [")
         for (i in 0 until event.pointerCount) {
             val pid = event.getPointerId(i)
@@ -172,13 +174,17 @@ class CanvasTouchHandler(
         when (event.actionMasked) {
             MotionEvent.ACTION_MOVE -> {
                 if (event.pointerCount == 1) {
-                    hoverState = HoverState(Offset(event.x, event.y),
+                    hoverState = HoverState(Offset(event.x, event.y), modifier = detectStrokeModifier(event),
                         delayMs = if (event.getToolType(0) == MotionEvent.TOOL_TYPE_FINGER)
                             FINGER_HOVER_DELAY_MS else STYLUS_HOVER_DELAY_MS)
                 }
             }
-            MotionEvent.ACTION_HOVER_MOVE -> {
-                hoverState = HoverState(Offset(event.x, event.y), delayMs = STYLUS_HOVER_DELAY_MS)
+            MotionEvent.ACTION_HOVER_ENTER,
+            MotionEvent.ACTION_HOVER_MOVE,
+            MotionEvent.ACTION_BUTTON_PRESS,
+            MotionEvent.ACTION_BUTTON_RELEASE -> {
+                hoverState = HoverState(Offset(event.x, event.y),
+                    modifier = detectStrokeModifier(event), delayMs = STYLUS_HOVER_DELAY_MS)
                 onInvalidate()
             }
             MotionEvent.ACTION_UP,
@@ -196,7 +202,7 @@ class CanvasTouchHandler(
             }
         }
 
-        if (event.actionMasked != MotionEvent.ACTION_MOVE || event.pointerCount >= 2) {
+        if (event.actionMasked != MotionEvent.ACTION_MOVE && event.actionMasked != MotionEvent.ACTION_HOVER_MOVE) {
             logPointers(event, eventActionName(event.actionMasked))
         }
 

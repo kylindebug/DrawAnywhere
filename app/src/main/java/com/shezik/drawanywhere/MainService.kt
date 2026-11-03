@@ -52,6 +52,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 
@@ -59,6 +61,8 @@ class MainService : Service() {
     companion object {
         private const val NOTIFICATION_ID = 100
         private const val CHANNEL_ID = "default_channel"
+        internal const val OVERLAY_INPUT_FLAGS = LayoutParams.FLAG_NOT_FOCUSABLE or
+            LayoutParams.FLAG_NOT_TOUCH_MODAL or LayoutParams.FLAG_SPLIT_TOUCH
         var isRunning: Boolean = false
             private set
     }
@@ -72,7 +76,6 @@ class MainService : Service() {
     private lateinit var preferencesManager: PreferencesManager
     private lateinit var viewModel: DrawViewModel
     private val serviceScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
-    private var previousInputState: Triple<Boolean, Boolean, Boolean>? = null
     private var toolbarExpandsTowardStart by mutableStateOf(false)
     private var eyeInWindow: Offset? = null
     private var measuredToolbarSize = IntSize.Zero
@@ -110,9 +113,8 @@ class MainService : Service() {
             LayoutParams.MATCH_PARENT,
             LayoutParams.MATCH_PARENT,
             LayoutParams.TYPE_APPLICATION_OVERLAY,
-            LayoutParams.FLAG_NOT_FOCUSABLE or
+            OVERLAY_INPUT_FLAGS or
                     LayoutParams.FLAG_HARDWARE_ACCELERATED or
-                    LayoutParams.FLAG_NOT_TOUCH_MODAL or
                     LayoutParams.FLAG_LAYOUT_IN_SCREEN,
             PixelFormat.TRANSLUCENT
         )
@@ -145,8 +147,7 @@ class MainService : Service() {
             LayoutParams.WRAP_CONTENT,
             LayoutParams.WRAP_CONTENT,
             LayoutParams.TYPE_APPLICATION_OVERLAY,
-            LayoutParams.FLAG_NOT_FOCUSABLE or
-                    LayoutParams.FLAG_NOT_TOUCH_MODAL or
+            OVERLAY_INPUT_FLAGS or
                     LayoutParams.FLAG_LAYOUT_IN_SCREEN,
             PixelFormat.TRANSLUCENT
         ).apply {
@@ -187,27 +188,35 @@ class MainService : Service() {
             windowManager.updateViewLayout(toolbarView, toolbarParams)
         }
 
-        // Observe UI state changes
+        // Split touch lets the toolbar receive a new pointer while a palm is
+        // still on the canvas. Tool/color changes do not alter either window.
         serviceScope.launch {
-            viewModel.uiState.collect { state ->
-                val inputState = Triple(state.canvasVisible, state.canvasPassthrough, state.fingerDrawingEnabled)
+            var previousInputState = Triple(initialUiState.canvasVisible,
+                initialUiState.canvasPassthrough, initialUiState.fingerDrawingEnabled)
+            viewModel.uiState.map { Triple(it.canvasVisible, it.canvasPassthrough, it.fingerDrawingEnabled) }
+                .distinctUntilChanged().collect { inputState ->
                 if (previousInputState != inputState) {
                     canvasView.cancelInput()
-                    previousInputState = inputState
                 }
-                applyCanvasPassthrough(canvasParams, state.canvasPassthrough)
-                windowManager.updateViewLayout(canvasView, canvasParams)
-                canvasView.visibility = if (state.canvasVisible) View.VISIBLE else View.GONE
+                if (previousInputState.second != inputState.second) {
+                    applyCanvasPassthrough(canvasParams, inputState.second)
+                    windowManager.updateViewLayout(canvasView, canvasParams)
+                }
+                canvasView.visibility = if (inputState.first) View.VISIBLE else View.GONE
+                previousInputState = inputState
             }
         }
 
         // Observe service state changes
         serviceScope.launch {
-            viewModel.serviceState.collect { state ->
-                applyToolbarPosition(toolbarParams, state)
+            viewModel.serviceState.map { it.toolbarPosition }.distinctUntilChanged().collect {
+                applyToolbarPosition(toolbarParams, viewModel.serviceState.value)
                 windowManager.updateViewLayout(toolbarView, toolbarParams)
-
-                val targetAlpha = if (state.toolbarActive) 1.0f else DrawViewModel.TOOLBAR_DIM_ALPHA
+            }
+        }
+        serviceScope.launch {
+            viewModel.serviceState.map { it.toolbarActive }.distinctUntilChanged().collect { active ->
+                val targetAlpha = if (active) 1.0f else DrawViewModel.TOOLBAR_DIM_ALPHA
                 toolbarView.animate()
                     .alpha(targetAlpha)
                     .setDuration(DrawViewModel.TOOLBAR_DIM_DURATION_MS)

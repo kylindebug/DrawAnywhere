@@ -24,11 +24,25 @@ data class Stroke(
     val points: List<Offset> get() = _points
 
     internal var cachedPath: Path? = null
+    internal var pathPrefix: Path? = null
+    internal var pathPointCount: Int = 0
     private var cachedBounds: Rect? = null
 
     internal fun invalidateGeometry() {
         cachedPath = null
+        pathPrefix = null
+        pathPointCount = 0
         cachedBounds = null
+    }
+
+    internal fun appendPoint(point: Offset) {
+        _points.add(point)
+        // Keep the settled curve prefix; only its tail changes on append.
+        cachedPath = null
+        cachedBounds = cachedBounds?.let {
+            Rect(minOf(it.left, point.x), minOf(it.top, point.y),
+                maxOf(it.right, point.x), maxOf(it.bottom, point.y))
+        }
     }
 
     internal val geometryBounds: Rect

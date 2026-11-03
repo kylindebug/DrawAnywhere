@@ -26,6 +26,8 @@ import androidx.compose.ui.graphics.toArgb
 import com.shezik.drawanywhere.DrawController
 import com.shezik.drawanywhere.DrawViewModel
 import com.shezik.drawanywhere.drawing.InkRenderer
+import com.shezik.drawanywhere.model.PenType
+import com.shezik.drawanywhere.model.StrokeModifier
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancel
@@ -130,7 +132,9 @@ class NativeDrawCanvasView(
 
         // ── Hover size preview (screen space, constant border) ────
         touchHandler.hoverState?.let { state ->
-            val config = viewModel.uiState.value.currentPenConfig
+            val ui = viewModel.uiState.value
+            val previewType = if (state.modifier != StrokeModifier.None) PenType.PixelEraser else ui.currentPenType
+            val config = ui.penConfigs.getValue(previewType)
 
             val alpha = if (state.isFading) {
                 val elapsed = System.currentTimeMillis() - state.fadeStartTimeMs - state.delayMs
@@ -153,7 +157,8 @@ class NativeDrawCanvasView(
 
                 val screenR = (config.width * vp.zoom - hoverPaint.strokeWidth) / 2f
                 if (screenR > 0f) {
-                    canvas.drawCircle(state.point.x, state.point.y, screenR, hoverFillPaint)
+                    if (!previewType.isEraser)
+                        canvas.drawCircle(state.point.x, state.point.y, screenR, hoverFillPaint)
                     canvas.drawCircle(state.point.x, state.point.y, screenR, hoverPaint)
                 }
             }

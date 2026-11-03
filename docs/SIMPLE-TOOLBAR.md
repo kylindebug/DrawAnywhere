@@ -74,3 +74,39 @@ five ADB stylus-draw/clear-button cycles (screenshot comparisons), and toolbar
 drag/restore. No newer ANR or ANR dialog was found. The toolbar was returned to
 its original left edge. This verifies the device remedy with synthetic input;
 it is not a new manual S Pen hardware acceptance test.
+
+## Palm-down clear, hover eraser and input cost (2026-11-03)
+
+Both overlay windows now use `FLAG_SPLIT_TOUCH`. A palm held on the canvas no
+longer captures subsequent toolbar pointers: clear can be tapped after pen-up
+without lifting the palm. This uses Android's standard per-pointer window
+routing; it does not implement concurrent drawing and underlying-app touch.
+
+Hover/button events carry the stylus modifier into the preview. Holding the
+side button shows a hollow circle at the pixel eraser's configured width;
+releasing it restores the pen preview without creating ink or undo entries.
+
+Pen and pixel-eraser paths retain their settled curve prefix and append new
+segments, preserving the original curve geometry and endpoint. Hover movement
+no longer writes a debug log per sample. Tool changes no longer relayout the
+canvas window; toolbar position and dimming observe their respective state
+changes independently. No debounce, extra gesture rejection, or clear delay
+was added.
+
+SM-X910 benchmark: 6,000 samples with a path request every four samples, median
+of four rounds after one warm-up round. Pen input/path construction dropped
+from 898.7 ms to 69.0 ms; pixel eraser from 860.3 ms to 58.1 ms. These are total
+CPU times for that synthetic workload, excluding GPU rasterization and display
+latency, not an end-to-end writing speed claim.
+
+Validation: 116 JVM tests, build/lint (0 errors, 38 warnings), and 25 device tests
+passed. Tests include real overlay-window input injection with a retained palm
+and a finger/stylus clear tap; hover-preview pixels; incremental/reference curve
+equality; pixel-erasure coverage; undo/redo; and existing toolbar/input behavior.
+The first UI attempt hit the lock screen. After unlock, UI checks passed but
+Samsung froze the test process after Activity teardown during later offscreen
+checks. Running offscreen checks before the Activity tests completed all 25 in
+6.763 seconds. Settings were restored byte-for-byte, APK hash verified, and test
+APK removed. Physical S Pen acceptance and the intermittent right-edge report
+remain distinct from these synthetic checks; no speculative edge interception
+was added while that issue could not be reproduced.

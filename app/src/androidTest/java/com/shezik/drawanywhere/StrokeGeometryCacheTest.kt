@@ -8,6 +8,21 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class StrokeGeometryCacheTest {
+    @Test fun incrementalCurveMatchesOriginalAtEveryRenderedFrame() {
+        val c = DrawController(PenConfig())
+        c.createStroke(Offset(20f, 50f))
+        val stroke = c.strokeList.single()
+        repeat(128) { i ->
+            c.updateLatestStroke(Offset(20f + i, 100f + kotlin.math.sin(i * .3f) * 70f))
+            val incremental = PenRenderer.pathFor(stroke).approximate(.01f)
+            val reference = PenRenderer.buildPath(stroke.points).approximate(.01f)
+            assertArrayEquals(reference, incremental, 0f)
+        }
+        stroke._points[0] = Offset.Zero
+        stroke.invalidateGeometry()
+        assertArrayEquals(PenRenderer.buildPath(stroke.points).approximate(.01f),
+            PenRenderer.pathFor(stroke).approximate(.01f), 0f)
+    }
     @Test fun drawingInvalidatesPathAndBoundsButIdleRenderingReusesThem() {
         val controller = DrawController(PenConfig())
         controller.createStroke(Offset.Zero)

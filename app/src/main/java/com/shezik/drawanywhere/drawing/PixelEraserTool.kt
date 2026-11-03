@@ -22,8 +22,7 @@ class PixelEraserTool(private val ctx: ToolContext) : StrokeTool {
         val last = current.points.last()
         if (last == point) return
         val previous = current.points.getOrElse(current.points.lastIndex - 1) { last }
-        current._points.add(point)
-        current.invalidateGeometry()
+        current.appendPoint(point)
         if (!attached) attachIfNeeded(previous, last, point)
         else ctx.notifyChanged()
     }
